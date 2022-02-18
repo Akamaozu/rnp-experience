@@ -1,7 +1,6 @@
 const Koa = require('koa')
 const os = require('os')
 const dotenv = require('dotenv')
-const Github = require('github-api')
 const escapeHtml = require('escape-html')
 const childProcess = require('child_process')
 const commands = require('./commands')

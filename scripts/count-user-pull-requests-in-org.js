@@ -3,7 +3,8 @@ const Github = require('github-api')
 const asyncPool = require('tiny-async-pool')
 const commands = require('../commands')
 
-const init = async () => {let scriptStartTime = Date.now()
+const init = async () => {
+  let scriptStartTime = Date.now()
   let actionStartTime
 
   dotenv.config()
@@ -74,6 +75,8 @@ const init = async () => {let scriptStartTime = Date.now()
 
     if (userPullRequests.length > 0) console.log('action=log-repo-with-user-pull-requests repo='+ orgRepo.name + ' user_prs='+ userPullRequests.length)
   })
+
+  console.log('action=log-script-runtime duration='+ (Date.now() - scriptStartTime) +'ms')
 }
 
 init()
