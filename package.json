@@ -10,5 +10,8 @@
 		"setup": "pnpm run download-data",
 		"download-data": "node scripts/download-all-data",
 		"count-user-prs": "node scripts/count-user-pull-requests-in-org"
+	},
+	"engines" : {
+		"node" : ">=14.0.0"
 	}
 }
