@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # write nginx config file
-cat > /etc/nginx/conf.d/elasticbeanstalk/https_custom.conf << LIMIT_STRING
+cat > /var/app/current/.platform/nginx/conf.d/https_custom.conf << LIMIT_STRING
 upstream nodejs {
     server 127.0.0.1:$PORT;
     keepalive 10;
