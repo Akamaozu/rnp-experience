@@ -1,5 +1,6 @@
 const Koa = require('koa')
 const dotenv = require('dotenv')
+const sizeOf = require('object-sizeof')
 const escapeHtml = require('escape-html')
 const asyncPool = require('tiny-async-pool')
 const commands = require('./commands')
@@ -266,6 +267,14 @@ const getOrgDataSize = () => {
   if (!orgRepos || !orgRepos.data) throw new Error('org repo data not yet loaded')
   if (!orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) throw new Error('org repo pull requests data not yet loaded')
 
+  const orgData = [ orgRepos.data ]
+
+  Object.keys(orgReposPullRequests).forEach(repoName => {
+    orgData.push(orgReposPullRequests[repoName].data)
+  })
+
+  const orgDataSizeBytes = sizeOf(orgData)
+
   const size = {
     gb: 0,
     mb: 0,
@@ -275,8 +284,8 @@ const getOrgDataSize = () => {
 
   const sizeConversionsFromBytes = {
     kb: b => b / 1000,
-    mb: b => b / (1024 * sizeConversionsToBytes.kb(1)),
-    gb: b => b / (1024 * sizeConversionsToBytes.mb(1)),
+    mb: b => b / sizeConversionsToBytes.mb(1),
+    gb: b => b / sizeConversionsToBytes.gb(1),
   }
 
   const sizeConversionsToBytes = {
@@ -288,11 +297,11 @@ const getOrgDataSize = () => {
   const convertSize = ({ from, to, size }) => {
     if (!from || !to || !size) throw new Error('missing required args')
 
-    const sizeBytes = from === 'b' ? from : sizeConversionsToBytes[from](size)
+    const sizeBytes = from === 'b' ? size : sizeConversionsToBytes[from](size)
     return to === 'b' ? sizeBytes : sizeConversionsFromBytes[to](sizeBytes)
   }
 
-  let unrecordedSizeBytes = orgRepos.meta.size_bytes
+  let unrecordedSizeBytes = orgDataSizeBytes
 
   let unrecordedGBs = Math.floor(convertSize({ from: 'b', to: 'gb', size: unrecordedSizeBytes }))
   if (unrecordedGBs >= 1) {
@@ -314,59 +323,6 @@ const getOrgDataSize = () => {
 
   if (unrecordedSizeBytes > 0) {
     size.b += unrecordedSizeBytes
-  }
-
-  // get size of each pr
-  Object.keys(orgReposPullRequests).forEach(repoName => {
-    const pullRequest = orgReposPullRequests[repoName]
-
-    let unrecordedSizeBytes = pullRequest.meta.size_bytes
-    let unrecordedGBs = Math.floor(convertSize({ from: 'b', to: 'gb', size: unrecordedSizeBytes }))
-    if (unrecordedGBs >= 1) {
-      size.gb += unrecordedGBs
-      unrecordedSizeBytes -= convertSize({ from:'gb', to: 'b', size: unrecordedGBs })
-    }
-
-    let unrecordedMBs = Math.floor(convertSize({ from: 'b', to: 'mb', size: unrecordedSizeBytes }))
-    if (unrecordedMBs >= 1) {
-      size.mb += unrecordedMBs
-      unrecordedSizeBytes -= convertSize({ from:'mb', to: 'b', size: unrecordedMBs })
-    }
-
-    let unrecordedKBs = Math.floor(convertSize({ from: 'b', to: 'kb', size: unrecordedSizeBytes }))
-    if (unrecordedKBs >= 1) {
-      size.kb += unrecordedKBs
-      unrecordedSizeBytes -= convertSize({ from:'kb', to: 'b', size: unrecordedKBs })
-    }
-
-    if (unrecordedSizeBytes > 0) {
-      size.b += unrecordedSizeBytes
-    }
-  })
-
-  // clean up total size object
-  if (size.b >= convertSize({ from:'kb', to: 'b', size: 1 })) {
-    const kbs = Math.floor(size.b / convertSize({ from:'kb', to: 'b', size: 1 }))
-    const remainderBytes = size.b % convertSize({ from:'kb', to: 'b', size: kbs })
-
-    size.kb += kbs
-    size.b = remainderBytes
-  }
-
-  if (size.kb >= convertSize({ from:'mb', to: 'kb', size: 1 })) {
-    const mbs = Math.floor(size.kb / convertSize({ from:'mb', to: 'kb', size: 1 }))
-    const remainderKBs = size.kb % convertSize({ from:'mb', to: 'kb', size: mbs })
-
-    size.mb += mbs
-    size.kb = remainderKBs
-  }
-
-  if (size.mb >= convertSize({ from:'gb', to: 'mb', size: 1 })) {
-    const gbs = Math.floor(size.mb / convertSize({ from:'gb', to: 'mb', size: 1 }))
-    const remainderMBs = size.mb % convertSize({ from:'gb', to: 'mb', size: gbs })
-
-    size.gb += gbs
-    size.mb = remainderMBs
   }
 
   return size
