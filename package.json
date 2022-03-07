@@ -4,6 +4,7 @@
 		"escape-html": "^1.0.3",
 		"github-api": "^3.4.0",
 		"koa": "^2.13.4",
+		"object-sizeof": "^1.6.3",
 		"tiny-async-pool": "^1.2.0"
 	},
 	"scripts": {
