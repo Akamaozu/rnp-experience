@@ -262,6 +262,109 @@ const getOrgReposPullRequests = async () => {
   console.log('action=load-org-repos-pull-requests success=true disk='+ sources.disk + ' network='+ sources.network)
 }
 
+const getOrgDataSize = () => {
+  if (!orgRepos || !orgRepos.data) throw new Error('org repo data not yet loaded')
+  if (!orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) throw new Error('org repo pull requests data not yet loaded')
+
+  const size = {
+    gb: 0,
+    mb: 0,
+    kb: 0,
+    b: 0,
+  }
+
+  const sizeConversionsFromBytes = {
+    kb: b => b / 1000,
+    mb: b => b / (1024 * sizeConversionsToBytes.kb(1)),
+    gb: b => b / (1024 * sizeConversionsToBytes.mb(1)),
+  }
+
+  const sizeConversionsToBytes = {
+    kb: kb => kb * 1000,
+    mb: mb => mb * 1024 * sizeConversionsToBytes.kb(1),
+    gb: gb => gb * 1024 * sizeConversionsToBytes.mb(1)
+  }
+
+  let unrecordedSizeBytes = orgRepos.meta.size_bytes
+
+  let unrecordedGBs = Math.floor(sizeConversionsFromBytes.gb(unrecordedSizeBytes))
+  if (unrecordedGBs >= 1) {
+    size.gb += unrecordedGBs
+    unrecordedSizeBytes -= sizeConversionsToBytes.gb(unrecordedGBs)
+  }
+
+  let unrecordedMBs = Math.floor(sizeConversionsFromBytes.mb(unrecordedSizeBytes))
+  if (unrecordedMBs >= 1) {
+    size.mb += unrecordedMBs
+    unrecordedSizeBytes -= sizeConversionsToBytes.mb(unrecordedMBs)
+  }
+
+  let unrecordedKBs = Math.floor(sizeConversionsFromBytes.kb(unrecordedSizeBytes))
+  if (unrecordedKBs >= 1) {
+    size.kb += unrecordedKBs
+    unrecordedSizeBytes -= sizeConversionsToBytes.kb(unrecordedKBs)
+  }
+
+  if (unrecordedSizeBytes > 0) {
+    size.b += unrecordedSizeBytes
+  }
+
+  // get size of each pr
+  Object.keys(orgReposPullRequests).forEach(repoName => {
+    const pullRequest = orgReposPullRequests[repoName]
+
+    let unrecordedSizeBytes = pullRequest.meta.size_bytes
+    let unrecordedGBs = Math.floor(sizeConversionsFromBytes.gb(unrecordedSizeBytes))
+    if (unrecordedGBs >= 1) {
+      size.gb += unrecordedGBs
+      unrecordedSizeBytes -= sizeConversionsToBytes.gb(unrecordedGBs)
+    }
+
+    let unrecordedMBs = Math.floor(sizeConversionsFromBytes.mb(unrecordedSizeBytes))
+    if (unrecordedMBs >= 1) {
+      size.mb += unrecordedMBs
+      unrecordedSizeBytes -= sizeConversionsToBytes.mb(unrecordedMBs)
+    }
+
+    let unrecordedKBs = Math.floor(sizeConversionsFromBytes.kb(unrecordedSizeBytes))
+    if (unrecordedKBs >= 1) {
+      size.kb += unrecordedKBs
+      unrecordedSizeBytes -= sizeConversionsToBytes.kb(unrecordedKBs)
+    }
+
+    if (unrecordedSizeBytes > 0) {
+      size.b += unrecordedSizeBytes
+    }
+  })
+
+  // clean up total size object
+  if (size.b >= sizeConversionsToBytes.kb(1)) {
+    const kbs = Math.floor(size.b / sizeConversionsToBytes.kb(1))
+    const remainderBytes = size.b % sizeConversionsToBytes.kb(kbs)
+
+    size.kb += kbs
+    size.b = remainderBytes
+  }
+
+  if (size.kb >= sizeConversionsFromBytes.kb(sizeConversionsToBytes.mb(1))) {
+    const mbs = Math.floor(size.kb / sizeConversionsFromBytes.kb(sizeConversionsToBytes.mb(1)))
+    const remainderKBs = size.kb % sizeConversionsFromBytes.kb(sizeConversionsToBytes.mb(mbs))
+
+    size.mb += mbs
+    size.kb = remainderKBs
+  }
+
+  if (size.mb >= sizeConversionsFromBytes.mb(sizeConversionsToBytes.gb(1))) {
+    const gbs = Math.floor(size.mb / sizeConversionsFromBytes.mb(sizeConversionsToBytes.gb(1)))
+    const remainderMBs = size.mb % sizeConversionsFromBytes.mb(sizeConversionsToBytes.gb(gbs))
+
+    size.gb += gbs
+    size.mb = remainderMBs
+  }
+
+  return size
+}
+
 const init = async () => {
   let startTime
 
@@ -273,6 +376,7 @@ const init = async () => {
   await getOrgRepos()
   await getOrgReposPullRequests()
   console.log('action=load-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
+  console.log('action=log-org-data-size size=', getOrgDataSize())
 
   let isRefreshingData = false
   setInterval(async () => {
@@ -285,6 +389,7 @@ const init = async () => {
     isRefreshingData = false
 
     console.log('action=refresh-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
+    console.log('action=log-org-data-size size=', getOrgDataSize())
   }, 1000 * 60)
 }
 

@@ -17,7 +17,8 @@ module.exports = async ({ accessToken, key }) => {
     data,
     meta: {
       created: dataFileStat.birthtime,
-      updated: dataFileStat.mtime
+      updated: dataFileStat.mtime,
+      size_bytes: dataFileStat.size,
     }
   }
 }
