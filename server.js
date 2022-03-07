@@ -219,44 +219,44 @@ const getOrgReposPullRequests = async () => {
   )
 
   if (getFromNetwork.length > 0) {
-    try {
-      await asyncPool(GITHUB_API_CONCURRENCY, getFromNetwork, repo => {
-        const getPullRequestsFromNetwork = async () => {
-          try {
-            fetchingOrgReposPullRequests[repo.name] = await commands.listRepoPullRequests({
-              accessToken: GITHUB_ACCESS_TOKEN,
-              owner: GITHUB_ORG_NAME,
-              repo: repo.name,
-            })
-          }
-
-          catch (networkLoadError) {
-            console.log('action=load-org-repos source=network success=false org='+ GITHUB_ORG_NAME + ' error="'+ networkLoadError.message +'"')
-            throw networkLoadError
-          }
-
-          await commands.saveData({
+    await asyncPool(GITHUB_API_CONCURRENCY, getFromNetwork, repo => {
+      const getPullRequestsFromNetwork = async () => {
+        try {
+          fetchingOrgReposPullRequests[repo.name] = await commands.listRepoPullRequests({
             accessToken: GITHUB_ACCESS_TOKEN,
-            key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories/'+ repo.name +'/pull-requests',
-            data: fetchingOrgReposPullRequests[repo.name],
+            owner: GITHUB_ORG_NAME,
+            repo: repo.name,
           })
-
-          orgReposPullRequests[repo.name] = await commands.loadData({
-            accessToken: GITHUB_ACCESS_TOKEN,
-            key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories/'+ repo.name +'/pull-requests',
-          })
-
-          return orgReposPullRequests[repo.name]
         }
 
-        return getPullRequestsFromNetwork()
-      })
-    }
+        catch (networkLoadError) {
+          console.log('action=load-org-repo-prs source=network success=false repo='+ repo.name + ' error="'+ networkLoadError.message +'"')
+          throw networkLoadError
+        }
 
-    catch (getFromNetworkError) {
-      console.log('action=load-org-repo-pull-requests success=false error="'+ getFromNetworkError.message + '"')
-      throw getFromNetworkError
-    }
+        await commands.saveData({
+          accessToken: GITHUB_ACCESS_TOKEN,
+          key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories/'+ repo.name +'/pull-requests',
+          data: fetchingOrgReposPullRequests[repo.name],
+        })
+
+        orgReposPullRequests[repo.name] = await commands.loadData({
+          accessToken: GITHUB_ACCESS_TOKEN,
+          key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories/'+ repo.name +'/pull-requests',
+        })
+
+        return orgReposPullRequests[repo.name]
+      }
+
+      try {
+        return getPullRequestsFromNetwork()
+      }
+
+      catch (getFromNetworkError) {
+        console.log('action=load-org-repo-pull-requests success=false error="'+ getFromNetworkError.message + '"')
+        throw getFromNetworkError
+      }
+    })
   }
 
   console.log('action=load-org-repos-pull-requests success=true disk='+ sources.disk + ' network='+ sources.network)
