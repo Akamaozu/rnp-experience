@@ -1,47 +1,34 @@
 const Koa = require('koa')
-const os = require('os')
 const dotenv = require('dotenv')
 const escapeHtml = require('escape-html')
-const childProcess = require('child_process')
+const asyncPool = require('tiny-async-pool')
 const commands = require('./commands')
 
-const promisifyChildProcessCommand = cmd => {
-  return new Promise((resolve, reject) => {
-    cmd.addListener("error", reject);
-    cmd.addListener("exit", resolve);
-  })
-}
+dotenv.config()
+const {
+  PORT = 3000,
+  GITHUB_ACCESS_TOKEN, GITHUB_API_CONCURRENCY, GITHUB_ORG_NAME, GITHUB_SAVED_ORG_DATA_EXPIRATION_MINS,
+  MOST_RECENT_PRS_COUNT
+} = process.env
 
-const start = async () => {
-  let startTime = Date.now()
+let orgRepos
+let fetchingOrgRepos
 
-  dotenv.config()
-  const { PORT = 3000, GITHUB_ACCESS_TOKEN, GITHUB_ORG_NAME, MOST_RECENT_PRS_COUNT } = process.env
+let orgReposPullRequests = {}
+let fetchingOrgReposPullRequests = {}
 
-  const downloadDataScript = childProcess.exec('node ./scripts/download-all-data')
-  const printChildProcessOutput = (name, output) => output.split(os.EOL).map(line => line && console.log('['+ name +'] '+ line.trim()))
-  downloadDataScript.stdout.on('data', output => printChildProcessOutput('download-data', output))
-  downloadDataScript.stderr.on('data', output => printChildProcessOutput('download-data', output))
-  await promisifyChildProcessCommand(downloadDataScript)
-  console.log('action=ensure-required-data-is-downloaded duration='+ (Date.now() - startTime) +'ms')
-
-  startTime = Date.now()
-  const orgRepos = await commands.loadData({ key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories', accessToken: GITHUB_ACCESS_TOKEN })
-
-  const orgReposPullRequests = {}
-  const getPullsResults = await Promise.all(
-    orgRepos.data.map(orgRepo => commands.loadData({
-      key: 'organizations/'+ GITHUB_ORG_NAME +'/repositories/'+ orgRepo.name +'/pull-requests',
-      accessToken: GITHUB_ACCESS_TOKEN
-    }))
-  )
-  getPullsResults.map((result, i) => orgReposPullRequests[orgRepos.data[i].name] = result.data)
-  console.log('action=load-data-into-memory duration='+ (Date.now() - startTime) +'ms')
-
-
-
+const startServer = () => {
   const app = new Koa()
 
+  const boldTextInHtml = str => '<b>'+ str +'</b>'
+  const createHtmlResponse = html => ''
+    + '<!doctype html>'
+    + '<head>'
+    +   '<title>GitHub Organizaton Explorer</title>'
+    + '</head>'
+    + '<body>'
+      + html
+    + '</body>'
 
   app.use(async ctx => {
     let username
@@ -50,7 +37,22 @@ const start = async () => {
     if (!dissectedPath[1]) username = 'akamaozu'
     else username = dissectedPath[1]
 
-    const boldTextInHtml = str => '<b>'+ str +'</b>'
+    if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length ) {
+      ctx.status = 503
+      ctx.set('Retry-After', 60 * 5)
+      ctx.body = createHtmlResponse( ''
+        + '<pre>'
+          + JSON.stringify({
+              action: 'load-user-pull-requests',
+              user: username,
+              success: false,
+              error: boldTextInHtml('org data not yet loaded. please try again later.')
+            }, null, 2)
+        + '</pre>'
+      )
+
+      return
+    }
 
     const payload = {
       user: boldTextInHtml(username.toLowerCase()),
@@ -64,7 +66,7 @@ const start = async () => {
       const orgRepoPullRequests = orgReposPullRequests[orgRepo.name]
       let marked = false
 
-      orgRepoPullRequests.map(pr => {
+      orgRepoPullRequests.data.map(pr => {
         if (pr.user.login.toLowerCase() !== username.toLowerCase()) return
 
         if (!marked) {
@@ -131,18 +133,159 @@ const start = async () => {
       })
     })
 
-    ctx.body = ''
-      + '<!doctype html>'
-      + '<head>'
-      +   '<title>GitHub Organizaton Explorer</title>'
-      + '</head>'
-      + '<body>'
-        + '<pre>'+ JSON.stringify(payload, null, 2) +'</pre>'
-      + '</body>'
-  });
+    ctx.body = createHtmlResponse('<pre>'+ JSON.stringify(payload, null, 2) +'</pre>')
+  })
 
   app.listen(PORT)
-  console.log('action=server-listen port='+ PORT)
 }
 
-start()
+const getOrgRepos = async () => {
+  try {
+    orgRepos = await commands.loadData({
+      accessToken: GITHUB_ACCESS_TOKEN,
+      key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories'
+    })
+
+    if (Date.now() - new Date(orgRepos.meta.updated).getTime() > (1000 * 60 * GITHUB_SAVED_ORG_DATA_EXPIRATION_MINS)) throw new Error('saved org repo data is stale')
+
+    console.log('action=load-org-repos success=true source=disk total='+ orgRepos.data.length)
+    return orgRepos
+  }
+
+  catch (diskLoadError) {
+    console.log('action=load-org-repos source=disk success=false org='+ GITHUB_ORG_NAME + ' error="'+ diskLoadError.message +'"')
+  }
+
+  try {
+    fetchingOrgRepos = await commands.listOrgRepos({
+      accessToken: GITHUB_ACCESS_TOKEN,
+      org: GITHUB_ORG_NAME,
+    })
+  }
+
+  catch (fetchError) {
+    console.log('action=load-org-repos source=network success=false org='+ GITHUB_ORG_NAME + ' error="'+ fetchError.message +'"')
+  }
+
+  if (!fetchingOrgRepos) throw new Error('unable to load org repo data')
+
+  console.log('action=load-org-repos success=true source=network total='+ fetchingOrgRepos.length)
+
+  await commands.saveData({
+    accessToken: GITHUB_ACCESS_TOKEN,
+    key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories',
+    data: fetchingOrgRepos,
+  })
+
+  console.log('action=save-org-repos-to-disk success=true')
+
+  orgRepos = await commands.loadData({
+    accessToken: GITHUB_ACCESS_TOKEN,
+    key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories',
+  })
+
+  return orgRepos
+}
+
+const getOrgReposPullRequests = async () => {
+  if (!orgRepos.data) throw new Error('org repo data not loaded')
+
+  const sources = {
+    disk: 0,
+    network: 0,
+  }
+
+  const getFromNetwork = []
+
+  await Promise.all(
+    orgRepos.data.map(async repo => {
+      try {
+        orgReposPullRequests[repo.name] = await commands.loadData({
+          accessToken: GITHUB_ACCESS_TOKEN,
+          key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories/'+ repo.name + '/pull-requests'
+        })
+
+        if (Date.now() - new Date(orgReposPullRequests[repo.name].meta.updated).getTime() > (1000 * 60 * GITHUB_SAVED_ORG_DATA_EXPIRATION_MINS)) throw new Error('saved data for repo "'+ repo.name +'" is stale.')
+
+        sources.disk += 1
+        return orgReposPullRequests[repo.name]
+      }
+
+      catch (diskLoadError) {
+        sources.network += 1
+        getFromNetwork.push(repo)
+      }
+    })
+  )
+
+  if (getFromNetwork.length > 0) {
+    try {
+      await asyncPool(GITHUB_API_CONCURRENCY, getFromNetwork, repo => {
+        const getPullRequestsFromNetwork = async () => {
+          try {
+            fetchingOrgReposPullRequests[repo.name] = await commands.listRepoPullRequests({
+              accessToken: GITHUB_ACCESS_TOKEN,
+              owner: GITHUB_ORG_NAME,
+              repo: repo.name,
+            })
+          }
+
+          catch (networkLoadError) {
+            console.log('action=load-org-repos source=network success=false org='+ GITHUB_ORG_NAME + ' error="'+ networkLoadError.message +'"')
+            throw networkLoadError
+          }
+
+          await commands.saveData({
+            accessToken: GITHUB_ACCESS_TOKEN,
+            key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories/'+ repo.name +'/pull-requests',
+            data: fetchingOrgReposPullRequests[repo.name],
+          })
+
+          orgReposPullRequests[repo.name] = await commands.loadData({
+            accessToken: GITHUB_ACCESS_TOKEN,
+            key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories/'+ repo.name +'/pull-requests',
+          })
+
+          return orgReposPullRequests[repo.name]
+        }
+
+        return getPullRequestsFromNetwork()
+      })
+    }
+
+    catch (getFromNetworkError) {
+      console.log('action=load-org-repo-pull-requests success=false error="'+ getFromNetworkError.message + '"')
+      throw getFromNetworkError
+    }
+  }
+
+  console.log('action=load-org-repos-pull-requests success=true disk='+ sources.disk + ' network='+ sources.network)
+}
+
+const init = async () => {
+  let startTime
+
+  startTime = Date.now()
+  startServer()
+  console.log('action=start-server success=true port='+ PORT +' duration='+ (Date.now() - startTime) + 'ms')
+
+  startTime = Date.now()
+  await getOrgRepos()
+  await getOrgReposPullRequests()
+  console.log('action=load-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
+
+  let isRefreshingData = false
+  setInterval(async () => {
+    if (isRefreshingData) return
+
+    isRefreshingData = true
+    startTime = Date.now()
+    await getOrgRepos()
+    await getOrgReposPullRequests()
+    isRefreshingData = false
+
+    console.log('action=refresh-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
+  }, 1000 * 60)
+}
+
+init()
