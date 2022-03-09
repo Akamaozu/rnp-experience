@@ -184,6 +184,11 @@ const getOrgReposPullRequests = async () => {
 
   orgRepos.data.forEach(repo => {
     orgReposPullRequests[repo.name].data.forEach(pr => {
+      // remove unneeded attributes to reduce server memory footprint
+      delete pr._links
+      delete pr.head
+      delete pr.labels
+
       // add pr to index hash data
       orgReposPullRequestsIndex.add( repo.name +'#'+ pr.number, pr )
 
