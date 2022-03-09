@@ -1,9 +1,11 @@
 const Koa = require('koa')
 const dotenv = require('dotenv')
+const KoaRouter = require('koa-router')
 const sizeOf = require('object-sizeof')
-const escapeHtml = require('escape-html')
 const asyncPool = require('tiny-async-pool')
+const createIndexingHash = require('cjs-indexing-hash')
 const commands = require('./commands')
+const routes = require('./routes')
 
 dotenv.config()
 const {
@@ -16,126 +18,36 @@ let orgRepos
 let fetchingOrgRepos
 
 let orgReposPullRequests = {}
+let orgReposPullRequestsIndex
+let orgReposPullRequestsAuthors = []
 let fetchingOrgReposPullRequests = {}
 
 const startServer = () => {
   const app = new Koa()
+  const router = new KoaRouter()
 
-  const boldTextInHtml = str => '<b>'+ str +'</b>'
-  const createHtmlResponse = html => ''
-    + '<!doctype html>'
-    + '<head>'
-    +   '<title>GitHub Organizaton Explorer</title>'
-    + '</head>'
-    + '<body>'
-      + html
-    + '</body>'
-
-  app.use(async ctx => {
-    let username
-
-    const dissectedPath = ctx.request.path.split('/')
-    if (!dissectedPath[1]) username = 'akamaozu'
-    else username = dissectedPath[1]
-
-    if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length ) {
-      ctx.status = 503
-      ctx.set('Retry-After', 60 * 5)
-      ctx.body = createHtmlResponse( ''
-        + '<pre>'
-          + JSON.stringify({
-              action: 'load-user-pull-requests',
-              user: username,
-              success: false,
-              error: boldTextInHtml('org data not yet loaded. please try again later.')
-            }, null, 2)
-        + '</pre>'
-      )
-
-      return
+  const setState = async (ctx, next) => {
+    ctx.state.utils = {
+      getOrgRepos,
+      getOrgReposPullRequests,
+      getOrgDataSize,
     }
 
-    const payload = {
-      user: boldTextInHtml(username.toLowerCase()),
-      organization: boldTextInHtml(GITHUB_ORG_NAME),
-      total_organization_repos: orgRepos.data.length,
-      total_org_repos_with_user_prs: 0,
-      repos_with_user_prs: {}
-    }
+    ctx.state.GITHUB_ORG_NAME = GITHUB_ORG_NAME
+    ctx.state.MOST_RECENT_PRS_COUNT = MOST_RECENT_PRS_COUNT
+    ctx.state.orgRepos = orgRepos
+    ctx.state.orgReposPullRequests = orgReposPullRequests
+    ctx.state.orgReposPullRequestsIndex = orgReposPullRequestsIndex
+    ctx.state.orgReposPullRequestsAuthors = orgReposPullRequestsAuthors
 
-    orgRepos.data.map(orgRepo => {
-      const orgRepoPullRequests = orgReposPullRequests[orgRepo.name]
-      let marked = false
+    await next()
+  }
 
-      orgRepoPullRequests.data.map(pr => {
-        if (pr.user.login.toLowerCase() !== username.toLowerCase()) return
+  router.get('/users', setState, routes.users.listUsers)
+  router.get('/users/:username', setState, routes.users.getUserByUsername)
 
-        if (!marked) {
-          payload.total_org_repos_with_user_prs += 1
-          marked = true
-        }
-
-        if (!payload.repos_with_user_prs[orgRepo.name]) {
-          payload.repos_with_user_prs[orgRepo.name] = {}
-          payload.repos_with_user_prs[orgRepo.name].repo = boldTextInHtml(orgRepo.name)
-          payload.repos_with_user_prs[orgRepo.name].language = boldTextInHtml(orgRepo.language)
-
-          if (orgRepo.description) payload.repos_with_user_prs[orgRepo.name].description = boldTextInHtml(orgRepo.description)
-
-          payload.repos_with_user_prs[orgRepo.name].total_user_prs = 0
-
-          if (username.toLowerCase() === 'akamaozu') {
-            switch (orgRepo.name) {
-              case 'caresix-web':
-                payload.repos_with_user_prs[orgRepo.name].user_notes = [
-                  'Description: ' + boldTextInHtml('Consumer Banking App in Niche Business Vertical'),
-                  'Technologies: ' + boldTextInHtml('React, Redux, Tailwind CSS, Node.js, Koa, Cypress, Storybook, Auth0, HubSpot'),
-                  'Responsibilities:',
-                  ' - ' + boldTextInHtml('Convert Sketch layouts to React Components and App Views for Invitation Workflow'),
-                  '   Example PRs: <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/274') + ' target="_blank">Lead Adds Insider</a>, <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/283') + ' target="_blank">Insider Enters Personal Details</a>, <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/361') + ' target="_blank">Insider Answers KYC Conditional Questions</a>, <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/300') + ' target="_blank">Lead Adds Team Member</a>',
-                  ' - ' + boldTextInHtml('Prepare and Present Some Enrollment Workflows to Client'),
-                  '   Example PRs: <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/395') + ' target="_blank">Insider Enrollment Demo Prep</a>, <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/405') + ' target="_blank">Implement Insider Enrollment Feedback</a>',
-                  ' - ' + boldTextInHtml('Integrate third-party functionalities'),
-                  '   Example PRs: <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/692') + ' target="_blank">HubSpot Chatbot</a>, <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/783') + ' target="_blank">Netspend Dispute Transactions Microapp</a>',
-                  ' - ' + boldTextInHtml('Investigate and Resolve Complicated Bugs'),
-                  '   Example PRs: <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/760') + ' target="_blank">Fix SVG Glitch in Safari</a>, <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/738') + ' target="_blank">Fix SMS Notifications</a>, <a href='+ escapeHtml('https://github.com/RobotsAndPencils/caresix-web/pull/731') + ' target="_blank">Fix Double Login Bug</a>',
-                ]
-                break
-
-              case 'studentapp-middleware':
-                payload.repos_with_user_prs[orgRepo.name].user_notes = [
-                  'Description: ' + boldTextInHtml('R&P Internal Product for Education Sector'),
-                  'Technologies: ' + boldTextInHtml('Node.js, AWS Lambda, AWS CloudFormation, Salesforce, Auth0'),
-                  'Responsibilities:',
-                  ' - ' + boldTextInHtml('Implement Architecture via CloudFormation Stacks'),
-                  '   Example PRs: <a href='+ escapeHtml('https://github.com/RobotsAndPencils/studentapp-middleware/pull/1') + ' target="_blank">Deploy With Nested CloudFormation</a>, <a href='+ escapeHtml('https://github.com/RobotsAndPencils/studentapp-middleware/pull/2') + ' target="_blank">Nested CloudFormation Stacks</a>',
-                  ' - ' + boldTextInHtml('Restrict API Route Access to Auth0 Identities'),
-                  '   Example PR: <a href='+ escapeHtml('https://github.com/RobotsAndPencils/studentapp-middleware/pull/10') + ' target="_blank">Lambda Authorization based on Identity Provider</a>',
-                  ' - ' + boldTextInHtml('Connect to Salesforce'),
-                  '   Example PR: <a href='+ escapeHtml('https://github.com/RobotsAndPencils/studentapp-middleware/pull/3') + ' target="_blank">Connect Middleware APIs to Salesforce data-stores</a>',
-                ]
-                break
-            }
-          }
-
-          payload.repos_with_user_prs[orgRepo.name].most_recent_user_prs = []
-        }
-
-        payload.repos_with_user_prs[orgRepo.name].total_user_prs += 1
-
-        if (payload.repos_with_user_prs[orgRepo.name].most_recent_user_prs.length < parseInt(MOST_RECENT_PRS_COUNT)) {
-          payload.repos_with_user_prs[orgRepo.name].most_recent_user_prs.push({
-            title: escapeHtml(pr.title),
-            url: '<a href='+ escapeHtml(pr.html_url) +' target='+ escapeHtml('_blank') +'>'+ escapeHtml(pr.html_url) + '</a>',
-            created: pr.created_at,
-            state: pr.merged_at ? 'merged' : pr.state,
-          })
-        }
-      })
-    })
-
-    ctx.body = createHtmlResponse('<pre>'+ JSON.stringify(payload, null, 2) +'</pre>')
-  })
+  app.use(router.routes())
+  app.use(router.allowedMethods())
 
   app.listen(PORT)
 }
@@ -184,6 +96,8 @@ const getOrgRepos = async () => {
     accessToken: GITHUB_ACCESS_TOKEN,
     key: 'organizations/'+ GITHUB_ORG_NAME + '/repositories',
   })
+
+  orgRepos.index = createIndexingHash(orgRepos.data)
 
   return orgRepos
 }
@@ -259,6 +173,38 @@ const getOrgReposPullRequests = async () => {
       }
     })
   }
+
+  orgReposPullRequestsIndex = createIndexingHash({})
+  orgReposPullRequestsAuthors = []
+  let orgRepoNames = orgRepos.data.map(repo => repo.name)
+
+  orgRepos.data.forEach(repo => {
+    orgReposPullRequests[repo.name].data.forEach(pr => {
+      // add pr to index hash data
+      orgReposPullRequestsIndex.add( repo.name +'#'+ pr.number, pr )
+
+      // create index for pr author, if none exists
+      const prAuthor = pr.user.login.toLowerCase()
+      if (!orgReposPullRequestsIndex.index_exists('author:'+ prAuthor)) {
+        orgReposPullRequestsIndex.add_index( 'author:'+ prAuthor, (unindexedPr, addToIndex) => {
+          if (unindexedPr.user.login.toLowerCase() === prAuthor) addToIndex()
+        })
+      }
+
+      // add author to list of all org pr authors
+      if (!orgReposPullRequestsAuthors.includes(pr.user.login.toLowerCase())) {
+        orgReposPullRequestsAuthors.push(pr.user.login.toLowerCase())
+      }
+
+      // create index for pr repo, if none exists
+      const prRepo = pr.base.repo.name.toLowerCase()
+      if (!orgReposPullRequestsIndex.index_exists('repo:'+ prRepo)) {
+        orgReposPullRequestsIndex.add_index( 'repo:'+ prRepo, (unindexedPr, addToIndex) => {
+          if (unindexedPr.user.login.toLowerCase() === prRepo) addToIndex()
+        })
+      }
+    })
+  })
 
   console.log('action=load-org-repos-pull-requests success=true disk='+ sources.disk + ' network='+ sources.network)
 }
@@ -336,10 +282,17 @@ const init = async () => {
   console.log('action=start-server success=true port='+ PORT +' duration='+ (Date.now() - startTime) + 'ms')
 
   startTime = Date.now()
-  await getOrgRepos()
-  await getOrgReposPullRequests()
-  console.log('action=load-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
-  console.log('action=log-org-data-size size=', getOrgDataSize())
+  try {
+    await getOrgRepos()
+    await getOrgReposPullRequests()
+    console.log('action=load-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
+    console.log('action=log-org-data-size size=', getOrgDataSize())
+  }
+  catch (loadInitialDataError) {
+    console.log('action=log-initial-data-load-error error="'+ loadInitialDataError.message +'"')
+    console.log('action=log-initial-data-load-error-handling-strategy details="do nothing. will automatically retry data fetches periodically."')
+    console.log({ loadInitialDataError })
+  }
 
   let isRefreshingData = false
   setInterval(async () => {
@@ -347,12 +300,19 @@ const init = async () => {
 
     isRefreshingData = true
     startTime = Date.now()
-    await getOrgRepos()
-    await getOrgReposPullRequests()
+    try {
+      await getOrgRepos()
+      await getOrgReposPullRequests()
+      console.log('action=refresh-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
+      console.log('action=log-org-data-size size=', getOrgDataSize())
+    }
+    catch (periodicDataError) {
+      console.log('action=log-periodic-data-load-error error="'+ periodicDataError.message +'"')
+      console.log('action=log-periodic-data-load-error-handling-strategy details="do nothing. will automatically retry data fetches periodically."')
+      console.log({ periodicDataError })
+    }
     isRefreshingData = false
 
-    console.log('action=refresh-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
-    console.log('action=log-org-data-size size=', getOrgDataSize())
   }, 1000 * 60)
 }
 
