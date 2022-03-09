@@ -13,6 +13,7 @@ const getUserByUsername = async ctx => {
   const orgReposPullRequests = ctx.state.orgReposPullRequests
   const orgReposPullRequestsIndex = ctx.state.orgReposPullRequestsIndex
   const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
+  const orgDataSize = ctx.state.orgDataSize
 
   if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) {
     ctx.status = 503
@@ -31,21 +32,27 @@ const getUserByUsername = async ctx => {
     return
   }
 
-  const user = orgReposPullRequestsIndex
-                .index_get('author:' + username.toLowerCase())
-                .map(key => orgReposPullRequestsIndex.get(key))
-                .find(pr => pr.user.login.toLowerCase() === username.toLowerCase())
-                .user
+  const userPrKey = orgReposPullRequestsIndex.index_get('author:' + username.toLowerCase())[0]
+  const user = orgReposPullRequestsIndex.get(userPrKey).user
 
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
-    user: ''
-          + boldTextInHtml(username.toLowerCase())
-          + '<span>'
-            + ' - <a href='+ escapeHtml(user.html_url) + ' target=\'_blank\'>github</a>'
-          + '</span>',
-    total_org_repos_with_user_prs: 0,
-    repos_with_user_prs: {}
+    repos: {
+      count: orgRepos.data.length,
+      pr_authors: orgReposPullRequestsAuthors.length,
+      prs: orgReposPullRequestsIndex.keys().length,
+    },
+    data_size: orgDataSize,
+    breadcrumb: ''
+      + '<a href='+ escapeHtml('/') + '>home</a>'
+      + ' > '
+      + '<a href='+ escapeHtml('/users') + '>pr authors</a>',
+    user: {
+      name: boldTextInHtml(username.toLowerCase()),
+      profile: '<a href='+ escapeHtml(user.html_url) + ' target=\'_blank\'>github</a>',
+      total_repos_with_user_prs: 0,
+      repos_with_user_prs: {},
+    },
   }
 
   const normalizedUsername = username.toLowerCase()
@@ -61,7 +68,7 @@ const getUserByUsername = async ctx => {
                     })
 
     // get a hash of repos user has PRs in
-    payload.repos_with_user_prs = userPrs
+    payload.user.repos_with_user_prs = userPrs
                     .reduce((state, userPr) => {
                       // repo doesn't exist in hash? create it
                       if (!state[userPr.base.repo.name]) {
@@ -92,7 +99,7 @@ const getUserByUsername = async ctx => {
                       return state
                     }, {})
 
-    payload.total_org_repos_with_user_prs = Object.keys(payload.repos_with_user_prs).length
+    payload.user.total_repos_with_user_prs = Object.keys(payload.user.repos_with_user_prs).length
   }
 
   ctx.body = createHtmlResponse('<pre>'+ JSON.stringify(payload, null, 2) +'</pre>')
@@ -126,11 +133,12 @@ const listUsers = async ctx => {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {
       count: orgRepos.data.length,
-      unique_pr_authors: orgReposPullRequestsAuthors.length,
+      pr_authors: orgReposPullRequestsAuthors.length,
       prs: orgReposPullRequestsIndex.keys().length,
     },
     data_size: orgDataSize,
-    repo_pr_authors: orgReposPullRequestsAuthors
+    breadcrumb: '<a href='+ escapeHtml('/') + '>home</a>',
+    pr_authors: orgReposPullRequestsAuthors
                       .sort()
                       .map(username => {
                         const normalizedUsername = username.toLowerCase()

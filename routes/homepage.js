@@ -32,12 +32,12 @@ const homepage = async ctx => {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {
       count: orgRepos.data.length,
-      unique_pr_authors: orgReposPullRequestsAuthors.length,
+      pr_authors: orgReposPullRequestsAuthors.length,
       prs: orgReposPullRequestsIndex.keys().length,
     },
     data_size: orgDataSize,
     pages: [
-      '<a href='+ escapeHtml('/users') +'>view repo pr authors</a>'
+      '<a href='+ escapeHtml('/users') +'>view pr authors</a>'
     ]
   }
 
