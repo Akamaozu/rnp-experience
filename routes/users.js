@@ -104,6 +104,7 @@ const listUsers = async ctx => {
   const orgReposPullRequests = ctx.state.orgReposPullRequests
   const orgReposPullRequestsIndex = ctx.state.orgReposPullRequestsIndex
   const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
+  const orgDataSize = ctx.state.orgDataSize
 
   if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) {
     ctx.status = 503
@@ -123,8 +124,12 @@ const listUsers = async ctx => {
 
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
-    total_organization_repos: orgRepos.data.length,
-    total_repo_pr_authors: orgReposPullRequestsAuthors.length,
+    repos: {
+      count: orgRepos.data.length,
+      unique_pr_authors: orgReposPullRequestsAuthors.length,
+      prs: orgReposPullRequestsIndex.keys().length,
+    },
+    data_size: orgDataSize,
     repo_pr_authors: orgReposPullRequestsAuthors
                       .sort()
                       .map(username => {

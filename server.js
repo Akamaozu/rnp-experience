@@ -22,6 +22,8 @@ let orgReposPullRequestsIndex
 let orgReposPullRequestsAuthors = []
 let fetchingOrgReposPullRequests = {}
 
+let orgDataSize
+
 const startServer = () => {
   const app = new Koa()
   const router = new KoaRouter()
@@ -39,6 +41,7 @@ const startServer = () => {
     ctx.state.orgReposPullRequests = orgReposPullRequests
     ctx.state.orgReposPullRequestsIndex = orgReposPullRequestsIndex
     ctx.state.orgReposPullRequestsAuthors = orgReposPullRequestsAuthors
+    ctx.state.orgDataSize = orgDataSize
 
     await next()
   }
@@ -272,7 +275,9 @@ const getOrgDataSize = () => {
     size.b += unrecordedSizeBytes
   }
 
-  return size
+  orgDataSize = size
+
+  return orgDataSize
 }
 
 const init = async () => {

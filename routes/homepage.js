@@ -7,7 +7,9 @@ const {
 const homepage = async ctx => {
   const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const orgRepos = ctx.state.orgRepos
+  const orgDataSize = ctx.state.orgDataSize
   const orgReposPullRequests = ctx.state.orgReposPullRequests
+  const orgReposPullRequestsIndex = ctx.state.orgReposPullRequestsIndex
   const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
 
   if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) {
@@ -28,8 +30,12 @@ const homepage = async ctx => {
 
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
-    total_organization_repos: orgRepos.data.length,
-    total_repo_pr_authors: orgReposPullRequestsAuthors.length,
+    repos: {
+      count: orgRepos.data.length,
+      unique_pr_authors: orgReposPullRequestsAuthors.length,
+      prs: orgReposPullRequestsIndex.keys().length,
+    },
+    data_size: orgDataSize,
     pages: [
       '<a href='+ escapeHtml('/users') +'>view repo pr authors</a>'
     ]
