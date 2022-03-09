@@ -1,14 +1,8 @@
-const escapeHtml = require('escape-html')
-
-const boldTextInHtml = str => '<b>'+ str +'</b>'
-const createHtmlResponse = html => ''
-  + '<!doctype html>'
-  + '<head>'
-  +   '<title>GitHub Organizaton Explorer</title>'
-  + '</head>'
-  + '<body>'
-    + html
-  + '</body>'
+const {
+  boldTextInHtml,
+  createHtmlResponse,
+  escapeHtml
+} = require('./route-utils')
 
 const getUserByUsername = async ctx => {
   const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
@@ -37,10 +31,19 @@ const getUserByUsername = async ctx => {
     return
   }
 
+  const user = orgReposPullRequestsIndex
+                .index_get('author:' + username.toLowerCase())
+                .map(key => orgReposPullRequestsIndex.get(key))
+                .find(pr => pr.user.login.toLowerCase() === username.toLowerCase())
+                .user
+
   const payload = {
-    user: boldTextInHtml(username.toLowerCase()),
     organization: boldTextInHtml(GITHUB_ORG_NAME),
-    total_organization_repos: orgRepos.data.length,
+    user: ''
+          + boldTextInHtml(username.toLowerCase())
+          + '<span>'
+            + ' - <a href='+ escapeHtml(user.html_url) + ' target=\'_blank\'>github</a>'
+          + '</span>',
     total_org_repos_with_user_prs: 0,
     repos_with_user_prs: {}
   }

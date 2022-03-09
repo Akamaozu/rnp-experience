@@ -1,5 +1,7 @@
+const homepage = require('./homepage')
 const userRoutes = require('./users')
 
 module.exports = {
-  users: userRoutes
+  homepage,
+  users: userRoutes,
 }

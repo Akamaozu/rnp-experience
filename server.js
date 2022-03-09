@@ -43,6 +43,7 @@ const startServer = () => {
     await next()
   }
 
+  router.get('/', setState, routes.homepage)
   router.get('/users', setState, routes.users.listUsers)
   router.get('/users/:username', setState, routes.users.getUserByUsername)
 
@@ -174,9 +175,9 @@ const getOrgReposPullRequests = async () => {
     })
   }
 
+  // create indexes for pull request data
   orgReposPullRequestsIndex = createIndexingHash({})
   orgReposPullRequestsAuthors = []
-  let orgRepoNames = orgRepos.data.map(repo => repo.name)
 
   orgRepos.data.forEach(repo => {
     orgReposPullRequests[repo.name].data.forEach(pr => {
