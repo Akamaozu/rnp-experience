@@ -115,6 +115,7 @@ const listUsers = async ctx => {
   const SORT_TYPES = {
     ALPHABETIC: 'alphabetic',
     RECENT: 'recent',
+    POLYGLOT: 'polyglot',
     PROLIFIC: 'prolific',
   }
 
@@ -158,6 +159,16 @@ const listUsers = async ctx => {
 
     return state
   }, {})
+  const usersLanguages = orgReposPullRequestsAuthors.reduce((state, username) => {
+    const normalizedUsername = username.toLowerCase()
+
+    state[normalizedUsername] = usersPullRequests[normalizedUsername].reduce((istate, pr) => {
+      if (!istate.includes(pr.base.repo.language)) istate.push(pr.base.repo.language)
+      return istate
+    }, [])
+
+    return state
+  }, {})
 
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
@@ -168,65 +179,82 @@ const listUsers = async ctx => {
     },
     data_size: orgDataSize,
     breadcrumb: '<a href='+ escapeHtml('/') + '>home</a>',
-    pr_authors_sort: ''
-      + (sort === SORT_TYPES.ALPHABETIC
-          ? 'alphabetic'
-          : '<a href=\'/users?sort=alphabetic\'>alphabetic</a>'
-        )
-      + ' '
-      + (sort === SORT_TYPES.RECENT
-          ? 'recent'
-          : '<a href=\'/users?sort=recent\'>recent</a>'
-        )
-      + ' '
-      + (sort === SORT_TYPES.PROLIFIC
-          ? 'prolific'
-          : '<a href=\'/users?sort=prolific\'>prolific</a>'
-        ),
-    pr_authors: orgReposPullRequestsAuthors
-                      .sort(
-                        sort === 'alphabetic'
-                          ? undefined // uses js default array sort
-                          : (a,b) => {
-                            switch (sort) {
-                              case 'recent':
-                                const aMostRecentPr = usersPullRequests[a.toLowerCase()][0]
-                                const bMostRecentPr = usersPullRequests[b.toLowerCase()][0]
+    pr_authors: {
+      sort: ''
+        + (sort === SORT_TYPES.ALPHABETIC
+            ? 'alphabetic'
+            : '<a href=\'/users?sort=alphabetic\'>alphabetic</a>'
+          )
+        + ' '
+        + (sort === SORT_TYPES.RECENT
+            ? 'recent'
+            : '<a href=\'/users?sort=recent\'>recent</a>'
+          )
+        + ' '
+        + (sort === SORT_TYPES.POLYGLOT
+            ? 'polyglot'
+            : '<a href=\'/users?sort=polyglot\'>polyglot</a>'
+          )
+        + ' '
+        + (sort === SORT_TYPES.PROLIFIC
+            ? 'prolific'
+            : '<a href=\'/users?sort=prolific\'>prolific</a>'
+          ),
+      data: orgReposPullRequestsAuthors
+              .sort(
+                sort === 'alphabetic'
+                  ? undefined // uses js default array sort
+                  : (a,b) => {
+                    switch (sort) {
+                      case 'recent':
+                        const aMostRecentPr = usersPullRequests[a.toLowerCase()][0]
+                        const bMostRecentPr = usersPullRequests[b.toLowerCase()][0]
 
-                                if (aMostRecentPr.created_at > bMostRecentPr.created_at) return -1
-                                if (aMostRecentPr.created_at < bMostRecentPr.created_at) return 1
-                                return 0
-                              break
+                        if (aMostRecentPr.created_at > bMostRecentPr.created_at) return -1
+                        if (aMostRecentPr.created_at < bMostRecentPr.created_at) return 1
+                        return 0
+                      break
 
-                              case 'prolific':
-                                const aPrs = usersPullRequests[a.toLowerCase()]
-                                const bPrs = usersPullRequests[b.toLowerCase()]
+                      case 'polyglot':
+                        const aLangs = usersLanguages[a.toLowerCase()]
+                        const bLangs = usersLanguages[b.toLowerCase()]
 
-                                if (aPrs.length > bPrs.length) return -1
-                                if (aPrs.length < bPrs.length) return 1
-                                return 0
-                              break
-                            }
-                          }
-                      )
-                      .map(username => {
-                        const normalizedUsername = username.toLowerCase()
-                        const userPrs = usersPullRequests[normalizedUsername]
-                        const reposWithUserPrs = userPrs.reduce((state, pr) => {
-                          return !state.includes(pr.base.repo.name)
-                            ? [].concat(state, pr.base.repo.name)
-                            : state
-                        }, [])
+                        if (aLangs.length > bLangs.length) return -1
+                        if (aLangs.length < bLangs.length) return 1
+                        return 0
+                      break
 
-                        return ''
-                          + '<a href='+ escapeHtml('/users/'+ normalizedUsername) +'>'
-                            + escapeHtml( normalizedUsername )
-                          + '</a>'
-                          + '<span style=\'color: #555; font-size: 0.85em; text-transform: uppercase; margin-left: 1em\'>'
-                            + userPrs.length +' '+ (userPrs.length != 1 ? 'pulls' : 'pull')
-                            + ', '+ reposWithUserPrs.length +' '+ (reposWithUserPrs.length != 1 ? 'repos' : 'repo')
-                          + '</span>'
-                      })
+                      case 'prolific':
+                        const aPrs = usersPullRequests[a.toLowerCase()]
+                        const bPrs = usersPullRequests[b.toLowerCase()]
+
+                        if (aPrs.length > bPrs.length) return -1
+                        if (aPrs.length < bPrs.length) return 1
+                        return 0
+                      break
+                    }
+                  }
+              )
+              .map(username => {
+                const normalizedUsername = username.toLowerCase()
+                const userPrs = usersPullRequests[normalizedUsername]
+                const reposWithUserPrs = userPrs.reduce((state, pr) => {
+                  return !state.includes(pr.base.repo.name)
+                    ? [].concat(state, pr.base.repo.name)
+                    : state
+                }, [])
+
+                return ''
+                  + '<a href='+ escapeHtml('/users/'+ normalizedUsername) +'>'
+                    + escapeHtml( normalizedUsername )
+                  + '</a>'
+                  + '<span style=\'color: #555; font-size: 0.85em; text-transform: uppercase; margin-left: 1em\'>'
+                    + userPrs.length +' '+ (userPrs.length != 1 ? 'pulls' : 'pull')
+                    + ', '+ reposWithUserPrs.length +' '+ (reposWithUserPrs.length != 1 ? 'repos' : 'repo')
+                    + ', '+ usersLanguages[normalizedUsername].length +' '+ (usersLanguages[normalizedUsername].length != 1 ? 'languages' : 'language')
+                  + '</span>'
+              }),
+    },
   }
 
   ctx.body = createHtmlResponse('<pre>'+ JSON.stringify(payload, null, 2) +'</pre>')
