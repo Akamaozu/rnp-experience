@@ -112,22 +112,52 @@ const listUsers = async ctx => {
   const orgReposPullRequestsIndex = ctx.state.orgReposPullRequestsIndex
   const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
   const orgDataSize = ctx.state.orgDataSize
+  const SORT_TYPES = {
+    ALPHABETIC: 'alphabetic',
+    RECENT: 'recent',
+    PROLIFIC: 'prolific',
+  }
 
   if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) {
     ctx.status = 503
     ctx.set('Retry-After', 60 * 5)
     ctx.body = createHtmlResponse( ''
+    + '<pre>'
+      + JSON.stringify({
+          action: 'load-all-pull-request-authors',
+          success: false,
+          error: boldTextInHtml('org data not yet loaded. please try again later.')
+        }, null, 2)
+    + '</pre>'
+    )
+
+    return
+  }
+
+  if (ctx.query.sort && !Object.values(SORT_TYPES).includes(ctx.query.sort)) {
+    ctx.status = 400
+    ctx.body = createHtmlResponse( ''
       + '<pre>'
         + JSON.stringify({
             action: 'load-all-pull-request-authors',
             success: false,
-            error: boldTextInHtml('org data not yet loaded. please try again later.')
+            error: boldTextInHtml('unknown sort type: '+ escapeHtml(ctx.query.sort) +'.')
           }, null, 2)
       + '</pre>'
     )
 
     return
   }
+
+  const sort = ctx.query.sort ?? SORT_TYPES.ALPHABETIC
+  const usersPullRequests = orgReposPullRequestsAuthors.reduce((state, username) => {
+    const normalizedUsername = username.toLowerCase()
+
+    state[normalizedUsername] = orgReposPullRequestsIndex.index_get('author:'+ normalizedUsername)
+                                  .map(key => orgReposPullRequestsIndex.get(key))
+
+    return state
+  }, {})
 
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
@@ -138,12 +168,50 @@ const listUsers = async ctx => {
     },
     data_size: orgDataSize,
     breadcrumb: '<a href='+ escapeHtml('/') + '>home</a>',
+    pr_authors_sort: ''
+      + (sort === SORT_TYPES.ALPHABETIC
+          ? 'alphabetic'
+          : '<a href=\'/users?sort=alphabetic\'>alphabetic</a>'
+        )
+      + ' '
+      + (sort === SORT_TYPES.RECENT
+          ? 'recent'
+          : '<a href=\'/users?sort=recent\'>recent</a>'
+        )
+      + ' '
+      + (sort === SORT_TYPES.PROLIFIC
+          ? 'prolific'
+          : '<a href=\'/users?sort=prolific\'>prolific</a>'
+        ),
     pr_authors: orgReposPullRequestsAuthors
-                      .sort()
+                      .sort(
+                        sort === 'alphabetic'
+                          ? undefined // uses js default array sort
+                          : (a,b) => {
+                            switch (sort) {
+                              case 'recent':
+                                const aMostRecentPr = usersPullRequests[a.toLowerCase()][0]
+                                const bMostRecentPr = usersPullRequests[b.toLowerCase()][0]
+
+                                if (aMostRecentPr.created_at > bMostRecentPr.created_at) return -1
+                                if (aMostRecentPr.created_at < bMostRecentPr.created_at) return 1
+                                return 0
+                              break
+
+                              case 'prolific':
+                                const aPrs = usersPullRequests[a.toLowerCase()]
+                                const bPrs = usersPullRequests[b.toLowerCase()]
+
+                                if (aPrs.length > bPrs.length) return -1
+                                if (aPrs.length < bPrs.length) return 1
+                                return 0
+                              break
+                            }
+                          }
+                      )
                       .map(username => {
                         const normalizedUsername = username.toLowerCase()
-                        const userPrs = orgReposPullRequestsIndex.index_get('author:'+ normalizedUsername)
-                                          .map(key => orgReposPullRequestsIndex.get(key))
+                        const userPrs = usersPullRequests[normalizedUsername]
                         const reposWithUserPrs = userPrs.reduce((state, pr) => {
                           return !state.includes(pr.base.repo.name)
                             ? [].concat(state, pr.base.repo.name)
