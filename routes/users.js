@@ -15,6 +15,9 @@ const getUserByUsername = async ctx => {
   const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
   const orgDataSize = ctx.state.orgDataSize
 
+  const usersPullRequests = ctx.state.usersPullRequests
+  const usersLanguages = ctx.state.usersLanguages
+
   if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) {
     ctx.status = 503
     ctx.set('Retry-After', 60 * 5)
@@ -34,6 +37,7 @@ const getUserByUsername = async ctx => {
 
   const userPrKey = orgReposPullRequestsIndex.index_get('author:' + username.toLowerCase())[0]
   const user = orgReposPullRequestsIndex.get(userPrKey).user
+  const normalizedUsername = username.toLowerCase()
 
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
@@ -48,14 +52,14 @@ const getUserByUsername = async ctx => {
       + ' > '
       + '<a href='+ escapeHtml('/users') + '>pr authors</a>',
     user: {
-      name: boldTextInHtml(username.toLowerCase()),
+      name: boldTextInHtml(normalizedUsername),
       profile: '<a href='+ escapeHtml(user.html_url) + ' target=\'_blank\'>github</a>',
+      languages: usersLanguages[normalizedUsername].sort().join(', '),
+      total_prs: usersPullRequests[normalizedUsername].length,
       total_repos_with_user_prs: 0,
       repos_with_user_prs: {},
     },
   }
-
-  const normalizedUsername = username.toLowerCase()
 
   if (orgReposPullRequestsAuthors.includes(normalizedUsername)) {
     // get user pull requests sorted by creation time
@@ -112,6 +116,10 @@ const listUsers = async ctx => {
   const orgReposPullRequestsIndex = ctx.state.orgReposPullRequestsIndex
   const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
   const orgDataSize = ctx.state.orgDataSize
+
+  const usersPullRequests = ctx.state.usersPullRequests
+  const usersLanguages = ctx.state.usersLanguages
+
   const SORT_TYPES = {
     ALPHABETIC: 'alphabetic',
     RECENT: 'recent',
@@ -151,25 +159,6 @@ const listUsers = async ctx => {
   }
 
   const sort = ctx.query.sort ?? SORT_TYPES.ALPHABETIC
-  const usersPullRequests = orgReposPullRequestsAuthors.reduce((state, username) => {
-    const normalizedUsername = username.toLowerCase()
-
-    state[normalizedUsername] = orgReposPullRequestsIndex.index_get('author:'+ normalizedUsername)
-                                  .map(key => orgReposPullRequestsIndex.get(key))
-
-    return state
-  }, {})
-  const usersLanguages = orgReposPullRequestsAuthors.reduce((state, username) => {
-    const normalizedUsername = username.toLowerCase()
-
-    state[normalizedUsername] = usersPullRequests[normalizedUsername].reduce((istate, pr) => {
-      if (!istate.includes(pr.base.repo.language)) istate.push(pr.base.repo.language)
-      return istate
-    }, [])
-
-    return state
-  }, {})
-
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {

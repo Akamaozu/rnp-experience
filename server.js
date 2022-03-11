@@ -22,6 +22,9 @@ let orgReposPullRequestsIndex
 let orgReposPullRequestsAuthors = []
 let fetchingOrgReposPullRequests = {}
 
+let usersPullRequests
+let usersLanguages
+
 let orgDataSize
 
 const startServer = () => {
@@ -42,6 +45,9 @@ const startServer = () => {
     ctx.state.orgReposPullRequestsIndex = orgReposPullRequestsIndex
     ctx.state.orgReposPullRequestsAuthors = orgReposPullRequestsAuthors
     ctx.state.orgDataSize = orgDataSize
+
+    ctx.state.usersPullRequests = usersPullRequests
+    ctx.state.usersLanguages = usersLanguages
 
     await next()
   }
@@ -214,6 +220,24 @@ const getOrgReposPullRequests = async () => {
       }
     })
   })
+
+  // pre-compute user stats
+  usersPullRequests = orgReposPullRequestsAuthors.reduce((state, username) => {
+    const normalizedUsername = username.toLowerCase()
+    state[normalizedUsername] = orgReposPullRequestsIndex.index_get('author:'+ normalizedUsername)
+                                  .map(key => orgReposPullRequestsIndex.get(key))
+
+    return state
+  }, {})
+
+  usersLanguages = orgReposPullRequestsAuthors.reduce((state, username) => {
+    const normalizedUsername = username.toLowerCase()
+    state[normalizedUsername] = usersPullRequests[normalizedUsername].reduce((istate, pr) => {
+      if (pr.base.repo.language && !istate.includes(pr.base.repo.language)) istate.push(pr.base.repo.language)
+      return istate
+    }, [])
+    return state
+  }, {})
 
   console.log('action=load-org-repos-pull-requests success=true disk='+ sources.disk + ' network='+ sources.network)
 }
