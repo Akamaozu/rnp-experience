@@ -31,6 +31,12 @@ const startServer = () => {
   const app = new Koa()
   const router = new KoaRouter()
 
+  const setResponseTimeHeader = async (ctx, next) => {
+    const start = Date.now()
+    await next()
+    ctx.set('Response-Time', (Date.now() - start) + 'ms')
+  }
+
   const setState = async (ctx, next) => {
     ctx.state.utils = {
       getOrgRepos,
@@ -52,10 +58,10 @@ const startServer = () => {
     await next()
   }
 
-  router.get('/', setState, routes.homepage)
-  router.get('/users', setState, routes.users.listUsers)
-  router.get('/users/:username', setState, routes.users.getUserByUsername)
-  router.get('/stats', setState, routes.stats.listStats)
+  router.get('/', setResponseTimeHeader, setState, routes.homepage)
+  router.get('/users', setResponseTimeHeader, setState, routes.users.listUsers)
+  router.get('/users/:username', setResponseTimeHeader, setState, routes.users.getUserByUsername)
+  router.get('/stats', setResponseTimeHeader, setState, routes.stats.listStats)
 
   app.use(router.routes())
   app.use(router.allowedMethods())
