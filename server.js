@@ -55,6 +55,7 @@ const startServer = () => {
   router.get('/', setState, routes.homepage)
   router.get('/users', setState, routes.users.listUsers)
   router.get('/users/:username', setState, routes.users.getUserByUsername)
+  router.get('/stats', setState, routes.stats.listStats)
 
   app.use(router.routes())
   app.use(router.allowedMethods())

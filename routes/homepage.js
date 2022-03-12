@@ -37,7 +37,8 @@ const homepage = async ctx => {
     },
     data_size: orgDataSize,
     pages: [
-      '<a href='+ escapeHtml('/users') +'>view pr authors</a>'
+      '<a href='+ escapeHtml('/users') +'>view pr authors</a>',
+      '<a href='+ escapeHtml('/stats') +'>view stats</a>'
     ]
   }
 
