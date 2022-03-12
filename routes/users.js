@@ -158,7 +158,7 @@ const listUsers = async ctx => {
     return
   }
 
-  const sort = ctx.query.sort ?? SORT_TYPES.ALPHABETIC
+  const sort = ctx.query.sort ?? SORT_TYPES.RECENT
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {
