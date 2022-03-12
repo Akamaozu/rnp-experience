@@ -57,6 +57,27 @@ const listStats = ctx => {const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
                                   return state
                                 }, {})
 
+  const monthStartOffset = today.getDate() - 1
+  const startOfMonth = new Date(today.getTime() - monthStartOffset * 24 * 60 * 60 * 1000).toISOString()
+  const prsThisMonth = Object.keys(orgReposPullRequests)
+                        .reduce((state, repoName) => [].concat(state, orgReposPullRequests[repoName].data), [])
+                        .filter(pr => pr.created_at >= startOfMonth)
+  const prsThisMonthAuthors = prsThisMonth.reduce((state, pr) => {
+    const normalizedUsername = pr.user.login.toLowerCase()
+    if (!state[normalizedUsername]) state[normalizedUsername] = []
+
+    state[normalizedUsername].push(pr)
+    return state
+  }, {})
+
+  const activeReposThisMonth = prsThisMonth
+                                .reduce((state, pr) => {
+                                  if (!state[pr.base.repo.name]) state[pr.base.repo.name] = []
+
+                                  state[pr.base.repo.name].push(pr)
+                                  return state
+                                }, {})
+
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {
@@ -128,6 +149,73 @@ const listStats = ctx => {const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
                                   + activeReposThisWeek[repoName].length +' '+ (activeReposThisWeek[repoName].length !== 1 ? 'pulls' : 'pull')
                                   + ', '
                                   + totalAuthorsThisWeek +' '+ (totalAuthorsThisWeek !== 1 ? 'authors' : 'author')
+                                + '</span>'
+                              )
+
+                              return state
+                            }, [])
+      },
+      month: {
+        total_prs: prsThisMonth.length,
+        total_pr_authors: Object.keys(prsThisMonthAuthors).length,
+        most_prolific_pr_authors: Object
+                                    .keys(prsThisMonthAuthors)
+                                    .sort((a,b) => {
+                                      const aPrsThisMonth = prsThisMonthAuthors[a]
+                                      const bPrsThisMonth = prsThisMonthAuthors[b]
+
+                                      if (aPrsThisMonth.length > bPrsThisMonth.length) return -1
+                                      if (aPrsThisMonth.length < bPrsThisMonth.length) return 1
+                                      return 0
+                                    })
+                                    .slice(0, 3)
+                                    .reduce((state, username) => {
+                                      const normalizedUsername = username.toLowerCase()
+                                      const totalUserPrsThisMonth = prsThisMonthAuthors[normalizedUsername].length
+                                      const reposThisMonth = prsThisMonthAuthors[normalizedUsername]
+                                                                  .reduce((state, pr) => {
+                                                                    if (!state.includes(pr.base.repo.name)) state.push(pr.base.repo.name)
+                                                                    return state
+                                                                  }, [])
+
+                                      state.push(''
+                                        + '<a href='+ escapeHtml('/users/'+ normalizedUsername) + '>'+ username + '</a>'
+                                        + ' '
+                                        + '<span style=\'color: #555; font-size: 0.85em; text-transform: uppercase\'>'
+                                        + totalUserPrsThisMonth +' pulls,'
+                                          + ' '
+                                          + reposThisMonth.length +' '+ (reposThisMonth.length !== 1 ? 'repos' : 'repo')
+                                        + '</span>'
+                                      )
+                                      return state
+                                    }, []),
+        most_active_repos: Object
+                            .keys(activeReposThisMonth)
+                            .sort((a,b) => {
+                              const aPrsThisMonth = activeReposThisMonth[a].length
+                              const bPrsThisMonth = activeReposThisMonth[b].length
+
+                              if (aPrsThisMonth > bPrsThisMonth) return -1
+                              if (aPrsThisMonth < bPrsThisMonth) return 1
+                              return 0
+                            })
+                            .slice(0,3)
+                            .reduce((state, repoName) => {
+                              const authorsThisMonth = activeReposThisMonth[repoName]
+                                                .reduce((state, pr) => {
+                                                  if (!state[pr.user.login.toLowerCase()]) state[pr.user.login.toLowerCase()] = 0
+                                                  state[pr.user.login.toLowerCase()] += 1
+                                                  return state
+                                                }, {})
+                              const totalAuthorsThisMonth = Object.keys(authorsThisMonth).length
+
+                              state.push( ''
+                                + repoName
+                                + ' '
+                                + '<span style=\'color: #555; font-size: 0.85em; text-transform: uppercase\'>'
+                                  + activeReposThisMonth[repoName].length +' '+ (activeReposThisMonth[repoName].length !== 1 ? 'pulls' : 'pull')
+                                  + ', '
+                                  + totalAuthorsThisMonth +' '+ (totalAuthorsThisMonth !== 1 ? 'authors' : 'author')
                                 + '</span>'
                               )
 
