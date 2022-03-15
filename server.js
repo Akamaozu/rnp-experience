@@ -51,6 +51,58 @@ repos.hooks.add('key-created', 'create-pulls-repo-index', ({ key }) => {
   })
 })
 
+pulls.add_index('created:this-week', (pr, addToIndex) => {
+  const today = new Date()
+  const dayOfWeek = today.getDay()
+  const firstDayOfWeek = 1 // monday
+  const weekStartOffset = dayOfWeek >= firstDayOfWeek
+                            ? dayOfWeek - firstDayOfWeek
+                            : 7 - dayOfWeek
+  const startOfWeek = new Date(today.getTime() - weekStartOffset * 24 * 60 * 60 * 1000)
+
+  startOfWeek.setHours(0,0,0,0)
+  if (pr.data.created_at >= startOfWeek.toISOString()) addToIndex()
+})
+
+pulls.add_index('created:last-week', (pr, addToIndex) => {
+  const today = new Date()
+  const dayOfWeek = today.getDay()
+  const firstDayOfWeek = 1 // monday
+  const weekStartOffset = dayOfWeek >= firstDayOfWeek
+                            ? dayOfWeek - firstDayOfWeek
+                            : 7 - dayOfWeek
+  const startOfWeek = new Date(today.getTime() - (weekStartOffset * 24 * 60 * 60 * 1000))
+  startOfWeek.setHours(0,0,0,0)
+  const startOfLastWeek = new Date(today.getTime() - ((weekStartOffset + 7) * 24 * 60 * 60 * 1000))
+
+  if (
+    pr.data.created_at >= startOfLastWeek.toISOString()
+    && pr.data.created_at < startOfWeek.toISOString()
+  ) addToIndex()
+})
+
+pulls.add_index('created:this-month', (pr, addToIndex) => {
+  const today = new Date()
+  const startOfMonth = new Date(today.getTime() - (today.getDate() - 1) * 24 * 60 * 60 * 1000)
+
+  startOfMonth.setHours(0,0,0,0)
+  if (pr.data.created_at >= startOfMonth.toISOString()) addToIndex()
+})
+
+pulls.add_index('created:last-month', (pr, addToIndex) => {
+  const today = new Date()
+  const startOfMonth = new Date(today.getTime() - (today.getDate() - 1) * 24 * 60 * 60 * 1000)
+
+  startOfMonth.setHours(0,0,0,0)
+  const endOfLastMonth = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth(), 0)
+  const startOfLastMonth = new Date(endOfLastMonth.getFullYear(), endOfLastMonth.getMonth(), 1)
+
+  if (
+    pr.data.created_at >= startOfLastMonth.toISOString()
+    && pr.data.created_at < startOfMonth.toISOString()
+  ) addToIndex()
+})
+
 let initialDataLoaded = false
 
 const startServer = () => {

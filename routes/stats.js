@@ -29,17 +29,9 @@ const listStats = ctx => {
   const users = ctx.state.users
   const orgDataSize = ctx.state.orgDataSize
 
-  const today = new Date()
-  const dayOfWeek = today.getDay()
-  const firstDayOfWeek = 1 // monday
-  const weekStartOffset = dayOfWeek >= firstDayOfWeek
-                            ? dayOfWeek - firstDayOfWeek
-                            : 7 - dayOfWeek
-  const startOfWeek = new Date(today.getTime() - weekStartOffset * 24 * 60 * 60 * 1000)
   const prsThisWeek = pulls
-                        .keys()
+                        .index_get('created:this-week')
                         .map(pullKey => pulls.get(pullKey).data)
-                        .filter(pr => pr.created_at >= startOfWeek.toISOString())
 
   const prsThisWeekAuthors = prsThisWeek.reduce((state, pr) => {
     const normalizedUsername = pr.user_key
@@ -57,16 +49,9 @@ const listStats = ctx => {
                                   return state
                                 }, {})
 
-  const startOfLastWeek = new Date(startOfWeek.getTime() - (7 * 24 * 60 * 60 * 1000))
   const prsLastWeek = pulls
-                        .keys()
+                        .index_get('created:last-week')
                         .map(pullKey => pulls.get(pullKey).data)
-                        .filter(pr => {
-                          return (
-                            pr.created_at >= startOfLastWeek.toISOString()
-                            && pr.created_at < startOfWeek.toISOString()
-                          )
-                        })
 
   const prsLastWeekAuthors = prsLastWeek.reduce((state, pr) => {
     const normalizedUsername = pr.user_key
@@ -84,11 +69,9 @@ const listStats = ctx => {
                                   return state
                                 }, {})
 
-  const startOfMonth = new Date(today.getTime() - today.getDate() * 24 * 60 * 60 * 1000)
   const prsThisMonth = pulls
-                        .keys()
+                        .index_get('created:this-month')
                         .map(pullKey => pulls.get(pullKey).data)
-                        .filter(pr => pr.created_at >= startOfMonth.toISOString())
 
   const prsThisMonthAuthors = prsThisMonth.reduce((state, pr) => {
     const normalizedUsername = pr.user_key
@@ -106,16 +89,9 @@ const listStats = ctx => {
                                   return state
                                 }, {})
 
-  const startOfLastMonth = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth(), 0)
   const prsLastMonth = pulls
-                        .keys()
+                        .index_get('created:last-month')
                         .map(pullKey => pulls.get(pullKey).data)
-                        .filter(pr => {
-                          return (
-                            pr.created_at >= startOfLastMonth.toISOString()
-                            && pr.created_at < startOfMonth.toISOString()
-                          )
-                        })
 
   const prsLastMonthAuthors = prsLastMonth.reduce((state, pr) => {
     const normalizedUsername = pr.user_key
