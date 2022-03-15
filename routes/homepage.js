@@ -6,13 +6,9 @@ const {
 
 const homepage = async ctx => {
   const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
-  const orgRepos = ctx.state.orgRepos
-  const orgDataSize = ctx.state.orgDataSize
-  const orgReposPullRequests = ctx.state.orgReposPullRequests
-  const orgReposPullRequestsIndex = ctx.state.orgReposPullRequestsIndex
-  const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
+  const initialDataLoaded = ctx.state.initialDataLoaded
 
-  if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) {
+  if (!initialDataLoaded) {
     ctx.status = 503
     ctx.set('Retry-After', 60 * 5)
     ctx.body = createHtmlResponse( ''
@@ -28,12 +24,22 @@ const homepage = async ctx => {
     return
   }
 
+  const repos = ctx.state.repos
+  const pulls = ctx.state.pulls
+  const users = ctx.state.users
+  const orgDataSize = ctx.state.orgDataSize
+
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {
-      count: orgRepos.data.length,
-      pr_authors: orgReposPullRequestsAuthors.length,
-      prs: orgReposPullRequestsIndex.keys().length,
+      count: repos.keys().length,
+      pr_authors: users.keys().reduce((state, user) => {
+        const userPrs = pulls.index_get('author:'+ user)
+        return userPrs.length > 0
+          ? state + 1
+          : state
+      }, 0),
+      prs: pulls.keys().length,
     },
     data_size: orgDataSize,
     pages: [

@@ -7,18 +7,9 @@ const {
 const getUserByUsername = async ctx => {
   const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const MOST_RECENT_PRS_COUNT = ctx.state.MOST_RECENT_PRS_COUNT
+  const initialDataLoaded = ctx.state.initialDataLoaded
 
-  const username = ctx.params.username
-  const orgRepos = ctx.state.orgRepos
-  const orgReposPullRequests = ctx.state.orgReposPullRequests
-  const orgReposPullRequestsIndex = ctx.state.orgReposPullRequestsIndex
-  const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
-  const orgDataSize = ctx.state.orgDataSize
-
-  const usersPullRequests = ctx.state.usersPullRequests
-  const usersLanguages = ctx.state.usersLanguages
-
-  if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) {
+  if (!initialDataLoaded) {
     ctx.status = 503
     ctx.set('Retry-After', 60 * 5)
     ctx.body = createHtmlResponse( ''
@@ -35,16 +26,41 @@ const getUserByUsername = async ctx => {
     return
   }
 
-  const userPrKey = orgReposPullRequestsIndex.index_get('author:' + username.toLowerCase())[0]
-  const user = orgReposPullRequestsIndex.get(userPrKey).user
-  const normalizedUsername = username.toLowerCase()
+  if (!ctx.params.username) {
+    ctx.status = 400
+    ctx.body = createHtmlResponse( ''
+      + '<pre>'
+        + JSON.stringify({
+            action: 'load-user-pull-requests',
+            user: username,
+            success: false,
+            error: boldTextInHtml('username not specified')
+          }, null, 2)
+      + '</pre>'
+    )
 
+    return
+  }
+
+  const username = ctx.params.username
+  const normalizedUsername = username.toLowerCase()
+  const users = ctx.state.users
+  const pulls = ctx.state.pulls
+  const repos = ctx.state.repos
+  const orgDataSize = ctx.state.orgDataSize
+
+  const user = users.get(normalizedUsername)
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {
-      count: orgRepos.data.length,
-      pr_authors: orgReposPullRequestsAuthors.length,
-      prs: orgReposPullRequestsIndex.keys().length,
+      count: repos.keys().length,
+      pr_authors: users.keys().reduce((state, user) => {
+        const userPrs = pulls.index_get('author:'+ user)
+        return userPrs.length > 0
+          ? state + 1
+          : state
+      }, 0),
+      prs: pulls.keys().length,
     },
     data_size: orgDataSize,
     breadcrumb: ''
@@ -54,45 +70,56 @@ const getUserByUsername = async ctx => {
     user: {
       name: boldTextInHtml(normalizedUsername),
       profile: '<a href='+ escapeHtml(user.html_url) + ' target=\'_blank\'>github</a>',
-      languages: usersLanguages[normalizedUsername].sort().join(', '),
-      total_prs: usersPullRequests[normalizedUsername].length,
+      languages: pulls.index_get('author:'+ normalizedUsername).reduce((state, pullKey) => {
+        const pull = pulls.get(pullKey).data
+        const repo = repos.get(pull.repo_key).data
+        const lang = repo.language
+
+        if (!state.includes(lang)) state.push(lang)
+        return state
+      }, []).sort().join(', '),
+      total_prs: pulls.index_get('author:'+ normalizedUsername).length,
       total_repos_with_user_prs: 0,
       repos_with_user_prs: {},
     },
   }
 
-  if (orgReposPullRequestsAuthors.includes(normalizedUsername)) {
+  let userPrs = pulls.index_get('author:'+ normalizedUsername)
+  if (userPrs.length > 0) {
     // get user pull requests sorted by creation time
-    let userPrs = orgReposPullRequestsIndex.index_get('author:'+ normalizedUsername)
-                    .map(key => orgReposPullRequestsIndex.get(key))
-                    .sort((a, b) => {
-                      if (a.created_at > b.created_at) return -1
-                      if (a.created_at < b.created_at) return 1
-                      return 0
-                    })
+    userPrs = userPrs
+                .map(key => pulls.get(key).data)
+                .sort((a, b) => {
+                  if (a.created_at > b.created_at) return -1
+                  if (a.created_at < b.created_at) return 1
+                  return 0
+                })
 
     // get a hash of repos user has PRs in
     payload.user.repos_with_user_prs = userPrs
                     .reduce((state, userPr) => {
+                      const repoKey = userPr.repo_key
+
                       // repo doesn't exist in hash? create it
-                      if (!state[userPr.base.repo.name]) {
-                        state[userPr.base.repo.name] = {
-                          repo: boldTextInHtml(userPr.base.repo.name),
-                          language: boldTextInHtml(userPr.base.repo.language)
+                      if (!state[repoKey]) {
+                        const repo = repos.get(repoKey).data
+                        state[repoKey] = {
+                          repo: boldTextInHtml(repo.name),
+                          language: boldTextInHtml(repo.language)
                         }
 
-                        if (userPr.base.repo.description) {
-                          state[userPr.base.repo.name].description = boldTextInHtml(userPr.base.repo.description)
+                        if (repo.description) {
+                          state[repoKey].description = boldTextInHtml(repo.description)
                         }
 
-                        state[userPr.base.repo.name].total_user_prs = 0
-                        state[userPr.base.repo.name].most_recent_user_prs = []
+                        state[repoKey].total_user_prs = 0
+                        state[repoKey].most_recent_user_prs = []
                       }
 
                       // add repo to payload and update stats
-                      state[userPr.base.repo.name].total_user_prs += 1
-                      if (state[userPr.base.repo.name].most_recent_user_prs.length < parseInt(MOST_RECENT_PRS_COUNT)) {
-                        state[userPr.base.repo.name].most_recent_user_prs.push({
+                      state[repoKey].total_user_prs += 1
+                      if (state[repoKey].most_recent_user_prs.length < parseInt(MOST_RECENT_PRS_COUNT)) {
+                        state[repoKey].most_recent_user_prs.push({
                           title: escapeHtml(userPr.title),
                           url: '<a href='+ escapeHtml(userPr.html_url) +' target='+ escapeHtml('_blank') +'>'+ escapeHtml(userPr.html_url) + '</a>',
                           created: userPr.created_at,
@@ -111,23 +138,9 @@ const getUserByUsername = async ctx => {
 
 const listUsers = async ctx => {
   const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
-  const orgRepos = ctx.state.orgRepos
-  const orgReposPullRequests = ctx.state.orgReposPullRequests
-  const orgReposPullRequestsIndex = ctx.state.orgReposPullRequestsIndex
-  const orgReposPullRequestsAuthors = ctx.state.orgReposPullRequestsAuthors
-  const orgDataSize = ctx.state.orgDataSize
+  const initialDataLoaded = ctx.state.initialDataLoaded
 
-  const usersPullRequests = ctx.state.usersPullRequests
-  const usersLanguages = ctx.state.usersLanguages
-
-  const SORT_TYPES = {
-    ALPHABETIC: 'alphabetic',
-    RECENT: 'recent',
-    POLYGLOT: 'polyglot',
-    PROLIFIC: 'prolific',
-  }
-
-  if (!orgRepos || !orgRepos.data || !orgReposPullRequests || Object.keys(orgReposPullRequests).length < orgRepos.data.length) {
+  if (!initialDataLoaded) {
     ctx.status = 503
     ctx.set('Retry-After', 60 * 5)
     ctx.body = createHtmlResponse( ''
@@ -141,6 +154,18 @@ const listUsers = async ctx => {
     )
 
     return
+  }
+
+  const repos = ctx.state.repos
+  const users = ctx.state.users
+  const pulls = ctx.state.pulls
+  const orgDataSize = ctx.state.orgDataSize
+
+  const SORT_TYPES = {
+    ALPHABETIC: 'alphabetic',
+    RECENT: 'recent',
+    POLYGLOT: 'polyglot',
+    PROLIFIC: 'prolific',
   }
 
   if (ctx.query.sort && !Object.values(SORT_TYPES).includes(ctx.query.sort)) {
@@ -159,12 +184,32 @@ const listUsers = async ctx => {
   }
 
   const sort = ctx.query.sort ?? SORT_TYPES.RECENT
+  const usersLanguages = users
+                          .keys()
+                          .reduce((state, user) => {
+                            state[user] = pulls
+                                            .index_get('author:'+ user)
+                                            .reduce((istate, key) => {
+                                              const pull = pulls.get(key)
+                                              const repo = repos.get(pull.data.repo_key)
+                                              const lang = repo.data.language
+
+                                              if (lang && !istate.includes(lang)) istate.push(lang)
+                                              return istate
+                                            }, [])
+                            return state
+                          }, {})
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {
-      count: orgRepos.data.length,
-      pr_authors: orgReposPullRequestsAuthors.length,
-      prs: orgReposPullRequestsIndex.keys().length,
+      count: repos.keys().length,
+      pr_authors: users.keys().reduce((state, user) => {
+        const userPrs = pulls.index_get('author:'+ user)
+        return userPrs.length > 0
+          ? state + 1
+          : state
+      }, 0),
+      prs: pulls.keys().length,
     },
     data_size: orgDataSize,
     breadcrumb: '<a href='+ escapeHtml('/') + '>home</a>',
@@ -189,24 +234,29 @@ const listUsers = async ctx => {
             ? 'prolific'
             : '<a href=\'/users?sort=prolific\'>prolific</a>'
           ),
-      data: orgReposPullRequestsAuthors
+      data: users
+              .keys()
+              .filter(user => {
+                const userPulls = pulls.index_get('author:'+ user)
+                return userPulls.length > 0
+              })
               .sort(
                 sort === 'alphabetic'
                   ? undefined // uses js default array sort
                   : (a,b) => {
                     switch (sort) {
                       case 'recent':
-                        const aMostRecentPr = usersPullRequests[a.toLowerCase()][0]
-                        const bMostRecentPr = usersPullRequests[b.toLowerCase()][0]
+                        const aMostRecentPr = pulls.get( pulls.index_get('author:'+ a)[0] )
+                        const bMostRecentPr = pulls.get( pulls.index_get('author:'+ b)[0] )
 
-                        if (aMostRecentPr.created_at > bMostRecentPr.created_at) return -1
-                        if (aMostRecentPr.created_at < bMostRecentPr.created_at) return 1
+                        if (aMostRecentPr.data.created_at > bMostRecentPr.data.created_at) return -1
+                        if (aMostRecentPr.data.created_at < bMostRecentPr.data.created_at) return 1
                         return 0
                       break
 
                       case 'polyglot':
-                        const aLangs = usersLanguages[a.toLowerCase()]
-                        const bLangs = usersLanguages[b.toLowerCase()]
+                        const aLangs = usersLanguages[a]
+                        const bLangs = usersLanguages[b]
 
                         if (aLangs.length > bLangs.length) return -1
                         if (aLangs.length < bLangs.length) return 1
@@ -214,8 +264,8 @@ const listUsers = async ctx => {
                       break
 
                       case 'prolific':
-                        const aPrs = usersPullRequests[a.toLowerCase()]
-                        const bPrs = usersPullRequests[b.toLowerCase()]
+                        const aPrs = pulls.index_get('author:'+ a)
+                        const bPrs = pulls.index_get('author:'+ b)
 
                         if (aPrs.length > bPrs.length) return -1
                         if (aPrs.length < bPrs.length) return 1
@@ -226,10 +276,11 @@ const listUsers = async ctx => {
               )
               .map(username => {
                 const normalizedUsername = username.toLowerCase()
-                const userPrs = usersPullRequests[normalizedUsername]
-                const reposWithUserPrs = userPrs.reduce((state, pr) => {
-                  return !state.includes(pr.base.repo.name)
-                    ? [].concat(state, pr.base.repo.name)
+                const userPrs = pulls.index_get('author:'+ normalizedUsername)
+                const reposWithUserPrs = userPrs.reduce((state, prKey) => {
+                  const pr = pulls.get(prKey)
+                  return !state.includes(pr.data.repo_key)
+                    ? [].concat(state, pr.data.repo_key)
                     : state
                 }, [])
 
