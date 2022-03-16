@@ -158,6 +158,22 @@ const listUsers = async ctx => {
                             return state
                           }, {})
 
+  const sortedPullsKeys = users
+                            .keys()
+                            .reduce((state, user) => {
+                              state[user] = pulls
+                                              .index_get('author:'+ user)
+                                              .sort((a, b) => {
+                                                const aPull = pulls.get(a).data
+                                                const bPull = pulls.get(b).data
+
+                                                if (aPull.created > bPull.created) return -1
+                                                if (aPull.created < bPull.created) return 1
+                                                return 0
+                                              })
+                              return state
+                            }, {})
+
   const payload = createPayload(ctx)
 
   payload.breadcrumb = '<a href='+ escapeHtml('/') + '>home</a>'
@@ -194,8 +210,8 @@ const listUsers = async ctx => {
                 : (a,b) => {
                   switch (sort) {
                     case 'recent':
-                      const aMostRecentPr = pulls.get( pulls.index_get('author:'+ a)[0] )
-                      const bMostRecentPr = pulls.get( pulls.index_get('author:'+ b)[0] )
+                      const aMostRecentPr = pulls.get(sortedPullsKeys[a][0])
+                      const bMostRecentPr = pulls.get(sortedPullsKeys[b][0])
 
                       if (aMostRecentPr.data.created_at > bMostRecentPr.data.created_at) return -1
                       if (aMostRecentPr.data.created_at < bMostRecentPr.data.created_at) return 1
