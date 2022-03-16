@@ -1,34 +1,20 @@
 const {
   boldTextInHtml,
   createHtmlResponse,
-  escapeHtml
+  escapeHtml,
+  setDataNotLoadedHtmlResponse,
+  setResponse,
 } = require('./route-utils')
 
 const getUserByUsername = async ctx => {
-  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
-  const MOST_RECENT_PRS_COUNT = ctx.state.MOST_RECENT_PRS_COUNT
   const initialDataLoaded = ctx.state.initialDataLoaded
-
   if (!initialDataLoaded) {
-    ctx.status = 503
-    ctx.set('Retry-After', 60 * 5)
-    ctx.body = createHtmlResponse( ''
-      + '<pre>'
-        + JSON.stringify({
-            action: 'load-user-pull-requests',
-            user: username,
-            success: false,
-            error: boldTextInHtml('org data not yet loaded. please try again later.')
-          }, null, 2)
-      + '</pre>'
-    )
-
+    setDataNotLoadedHtmlResponse({ ctx, action: 'view-user' })
     return
   }
 
   if (!ctx.params.username) {
-    ctx.status = 400
-    ctx.body = createHtmlResponse( ''
+    const body = createHtmlResponse( ''
       + '<pre>'
         + JSON.stringify({
             action: 'load-user-pull-requests',
@@ -39,9 +25,12 @@ const getUserByUsername = async ctx => {
       + '</pre>'
     )
 
+    setResponse({ ctx, status: 400, body })
     return
   }
 
+  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
+  const MOST_RECENT_PRS_COUNT = ctx.state.MOST_RECENT_PRS_COUNT
   const username = ctx.params.username
   const normalizedUsername = username.toLowerCase()
   const users = ctx.state.users
@@ -137,25 +126,13 @@ const getUserByUsername = async ctx => {
 }
 
 const listUsers = async ctx => {
-  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const initialDataLoaded = ctx.state.initialDataLoaded
-
   if (!initialDataLoaded) {
-    ctx.status = 503
-    ctx.set('Retry-After', 60 * 5)
-    ctx.body = createHtmlResponse( ''
-    + '<pre>'
-      + JSON.stringify({
-          action: 'load-all-pull-request-authors',
-          success: false,
-          error: boldTextInHtml('org data not yet loaded. please try again later.')
-        }, null, 2)
-    + '</pre>'
-    )
-
+    setDataNotLoadedHtmlResponse({ ctx, action: 'view-pull-request-authors' })
     return
   }
 
+  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const repos = ctx.state.repos
   const users = ctx.state.users
   const pulls = ctx.state.pulls
@@ -169,17 +146,16 @@ const listUsers = async ctx => {
   }
 
   if (ctx.query.sort && !Object.values(SORT_TYPES).includes(ctx.query.sort)) {
-    ctx.status = 400
-    ctx.body = createHtmlResponse( ''
-      + '<pre>'
-        + JSON.stringify({
-            action: 'load-all-pull-request-authors',
-            success: false,
-            error: boldTextInHtml('unknown sort type: '+ escapeHtml(ctx.query.sort) +'.')
-          }, null, 2)
-      + '</pre>'
-    )
-
+    const body = createHtmlResponse( ''
+                    + '<pre>'
+                      + JSON.stringify({
+                          action: 'load-all-pull-request-authors',
+                          success: false,
+                          error: boldTextInHtml('unknown sort type: '+ escapeHtml(ctx.query.sort) +'.')
+                        }, null, 2)
+                    + '</pre>'
+                  )
+    setResponse({ ctx, status: 400, body })
     return
   }
 

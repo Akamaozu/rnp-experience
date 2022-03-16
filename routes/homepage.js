@@ -1,29 +1,18 @@
 const {
   boldTextInHtml,
   createHtmlResponse,
+  setDataNotLoadedHtmlResponse,
   escapeHtml
 } = require('./route-utils')
 
 const homepage = async ctx => {
-  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const initialDataLoaded = ctx.state.initialDataLoaded
-
   if (!initialDataLoaded) {
-    ctx.status = 503
-    ctx.set('Retry-After', 60 * 5)
-    ctx.body = createHtmlResponse( ''
-      + '<pre>'
-        + JSON.stringify({
-            action: 'load-homepage',
-            success: false,
-            error: boldTextInHtml('org data not yet loaded. please try again later.')
-          }, null, 2)
-      + '</pre>'
-    )
-
+    setDataNotLoadedHtmlResponse({ ctx, action: 'view-homepage' })
     return
   }
 
+  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const repos = ctx.state.repos
   const pulls = ctx.state.pulls
   const users = ctx.state.users
