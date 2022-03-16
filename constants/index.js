@@ -1,5 +1,7 @@
+const sortConstants = require('./sort')
 const timeConstants = require('./time')
 
 module.exports = {
-  time: timeConstants
+  sort: sortConstants,
+  time: timeConstants,
 }

@@ -1,5 +1,4 @@
 const {
-  boldTextInHtml,
   createHtmlResponse,
   createPayload,
   setDataNotLoadedHtmlResponse,

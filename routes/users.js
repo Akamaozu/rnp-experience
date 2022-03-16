@@ -1,3 +1,4 @@
+const constants = require('../constants')
 const {
   boldTextInHtml,
   createHtmlResponse,
@@ -120,18 +121,11 @@ const listUsers = async ctx => {
     return
   }
 
-  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const repos = ctx.state.repos
   const users = ctx.state.users
   const pulls = ctx.state.pulls
-  const orgDataSize = ctx.state.orgDataSize
 
-  const SORT_TYPES = {
-    ALPHABETIC: 'alphabetic',
-    RECENT: 'recent',
-    POLYGLOT: 'polyglot',
-    PROLIFIC: 'prolific',
-  }
+  const SORT_TYPES = constants.sort.PR_AUTHORS
 
   if (ctx.query.sort && !Object.values(SORT_TYPES).includes(ctx.query.sort)) {
     const body = createHtmlResponse( ''
