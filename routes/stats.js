@@ -18,6 +18,11 @@ const listStats = ctx => {
   const prsThisWeek = pulls
                         .index_get('created:this-week')
                         .map(pullKey => pulls.get(pullKey).data)
+                        .sort((a, b) => {
+                          if (a.created_at > b.created_at) return -1
+                          if (a.created_at < b.created_at) return 1
+                          return 0
+                        })
 
   const prsThisWeekAuthors = prsThisWeek.reduce((state, pr) => {
     const normalizedUsername = pr.user_key
@@ -38,6 +43,22 @@ const listStats = ctx => {
   const prsLastWeek = pulls
                         .index_get('created:last-week')
                         .map(pullKey => pulls.get(pullKey).data)
+                        .sort((a, b) => {
+                          if (a.created_at > b.created_at) return -1
+                          if (a.created_at < b.created_at) return 1
+                          return 0
+                        })
+
+
+  const today = new Date()
+  const dayOfWeek = today.getDay()
+  const firstDayOfWeek = 1 // monday
+  const weekStartOffset = dayOfWeek >= firstDayOfWeek
+                            ? dayOfWeek - firstDayOfWeek
+                            : 7 - dayOfWeek
+  const startOfWeek = new Date(today.getTime() - (weekStartOffset * 24 * 60 * 60 * 1000))
+  startOfWeek.setHours(0,0,0,0)
+  const startOfLastWeek = new Date(startOfWeek.getTime() - (7 * 24 * 60 * 60 * 1000))
 
   const prsLastWeekAuthors = prsLastWeek.reduce((state, pr) => {
     const normalizedUsername = pr.user_key
@@ -58,6 +79,11 @@ const listStats = ctx => {
   const prsThisMonth = pulls
                         .index_get('created:this-month')
                         .map(pullKey => pulls.get(pullKey).data)
+                        .sort((a, b) => {
+                          if (a.created_at > b.created_at) return -1
+                          if (a.created_at < b.created_at) return 1
+                          return 0
+                        })
 
   const prsThisMonthAuthors = prsThisMonth.reduce((state, pr) => {
     const normalizedUsername = pr.user_key
@@ -78,6 +104,11 @@ const listStats = ctx => {
   const prsLastMonth = pulls
                         .index_get('created:last-month')
                         .map(pullKey => pulls.get(pullKey).data)
+                        .sort((a, b) => {
+                          if (a.created_at > b.created_at) return -1
+                          if (a.created_at < b.created_at) return 1
+                          return 0
+                        })
 
   const prsLastMonthAuthors = prsLastMonth.reduce((state, pr) => {
     const normalizedUsername = pr.user_key
@@ -118,6 +149,13 @@ const listStats = ctx => {
 
                                     if (aPrsThisWeek.length > bPrsThisWeek.length) return -1
                                     if (aPrsThisWeek.length < bPrsThisWeek.length) return 1
+
+                                    const aNewestPrThisWeek = aPrsThisWeek[aPrsThisWeek.length - 1]
+                                    const bNewestPrThisWeek = bPrsThisWeek[bPrsThisWeek.length - 1]
+
+                                    if (aNewestPrThisWeek.created_at > bNewestPrThisWeek.created_at) return 1
+                                    if (aNewestPrThisWeek.created_at < bNewestPrThisWeek.created_at) return -1
+
                                     return 0
                                   })
                                   .slice(0, 3)
@@ -149,6 +187,13 @@ const listStats = ctx => {
 
                             if (aPrsThisWeek > bPrsThisWeek) return -1
                             if (aPrsThisWeek < bPrsThisWeek) return 1
+
+                            const aNewestPrThisWeek = activeReposThisWeek[a][aPrsThisWeek - 1]
+                            const bNewestPrThisWeek = activeReposThisWeek[b][bPrsThisWeek - 1]
+
+                            if (aNewestPrThisWeek.created_at > bNewestPrThisWeek.created_at) return 1
+                            if (aNewestPrThisWeek.created_at < bNewestPrThisWeek.created_at) return -1
+
                             return 0
                           })
                           .slice(0,3)
@@ -188,11 +233,21 @@ const listStats = ctx => {
       most_prolific_pr_authors: Object
                                   .keys(prsLastWeekAuthors)
                                   .sort((a,b) => {
+                                    // rank author with most prs higher
                                     const aPrsLastWeek = prsLastWeekAuthors[a]
                                     const bPrsLastWeek = prsLastWeekAuthors[b]
 
                                     if (aPrsLastWeek.length > bPrsLastWeek.length) return -1
                                     if (aPrsLastWeek.length < bPrsLastWeek.length) return 1
+
+                                    // rank author whose newest pr is older higher
+                                    // - since they were the first to get to this total
+                                    const aNewestPrLastWeek = aPrsLastWeek[aPrsLastWeek.length - 1]
+                                    const bNewestPrLastWeek = bPrsLastWeek[bPrsLastWeek.length - 1]
+
+                                    if (aNewestPrLastWeek.created_at > bNewestPrLastWeek.created_at) return 1
+                                    if (aNewestPrLastWeek.created_at < bNewestPrLastWeek.created_at) return -1
+
                                     return 0
                                   })
                                   .slice(0, 3)
@@ -263,11 +318,21 @@ const listStats = ctx => {
       most_prolific_pr_authors: Object
                                   .keys(prsThisMonthAuthors)
                                   .sort((a,b) => {
+                                    // rank author with most prs higher
                                     const aPrsThisMonth = prsThisMonthAuthors[a]
                                     const bPrsThisMonth = prsThisMonthAuthors[b]
 
                                     if (aPrsThisMonth.length > bPrsThisMonth.length) return -1
                                     if (aPrsThisMonth.length < bPrsThisMonth.length) return 1
+
+                                    // rank author whose newest pr is older higher
+                                    // - since they were the first to get to this total
+                                    const aNewestPrThisMonth = aPrsThisMonth[aPrsThisMonth.length - 1]
+                                    const bNewestPrThisMonth = bPrsThisMonth[bPrsThisMonth.length - 1]
+
+                                    if (aNewestPrThisMonth.created_at > bNewestPrThisMonth.created_at) return 1
+                                    if (aNewestPrThisMonth.created_at < bNewestPrThisMonth.created_at) return -1
+
                                     return 0
                                   })
                                   .slice(0, 3)
@@ -338,11 +403,21 @@ const listStats = ctx => {
       most_prolific_pr_authors: Object
                                   .keys(prsLastMonthAuthors)
                                   .sort((a,b) => {
+                                    // rank author with more prs higher
                                     const aPrsLastMonth = prsLastMonthAuthors[a]
                                     const bPrsLastMonth = prsLastMonthAuthors[b]
 
                                     if (aPrsLastMonth.length > bPrsLastMonth.length) return -1
                                     if (aPrsLastMonth.length < bPrsLastMonth.length) return 1
+
+                                    // rank author whose newest pr is older higher
+                                    // - since they were the first to get to this total
+                                    const aNewestPrLastMonth = aPrsLastMonth[aPrsLastMonth.length - 1]
+                                    const bNewestPrLastMonth = bPrsLastMonth[bPrsLastMonth.length - 1]
+
+                                    if (aNewestPrLastMonth.created_at > bNewestPrLastMonth.created_at) return 1
+                                    if (aNewestPrLastMonth.created_at < bNewestPrLastMonth.created_at) return -1
+
                                     return 0
                                   })
                                   .slice(0, 3)

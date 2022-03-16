@@ -124,7 +124,6 @@ const listUsers = async ctx => {
   const repos = ctx.state.repos
   const users = ctx.state.users
   const pulls = ctx.state.pulls
-
   const SORT_TYPES = constants.sort.PR_AUTHORS
 
   if (ctx.query.sort && !Object.values(SORT_TYPES).includes(ctx.query.sort)) {
@@ -167,8 +166,8 @@ const listUsers = async ctx => {
                                                 const aPull = pulls.get(a).data
                                                 const bPull = pulls.get(b).data
 
-                                                if (aPull.created > bPull.created) return -1
-                                                if (aPull.created < bPull.created) return 1
+                                                if (aPull.created_at > bPull.created_at) return -1
+                                                if (aPull.created_at < bPull.created_at) return 1
                                                 return 0
                                               })
                               return state
