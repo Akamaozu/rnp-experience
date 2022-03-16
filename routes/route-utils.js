@@ -15,6 +15,31 @@ const createHtmlResponse = html => ''
     + '</body>'
   + '</html>'
 
+const createPayload = ctx => {
+  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
+  const repos = ctx.state.repos
+  const pulls = ctx.state.pulls
+  const users = ctx.state.users
+  const orgDataSize = ctx.state.orgDataSize
+
+  const payload = {
+    organization: boldTextInHtml(GITHUB_ORG_NAME),
+    repos: {
+      count: repos.keys().length,
+      pr_authors: users.keys().reduce((state, user) => {
+        const userPrs = pulls.index_get('author:'+ user)
+        return userPrs.length > 0
+          ? state + 1
+          : state
+      }, 0),
+      prs: pulls.keys().length,
+    },
+    data_size: orgDataSize,
+  }
+
+  return payload
+}
+
 const setDataNotLoadedHtmlResponse = ({ ctx, action, retrySecs = 5 * constants.time.MIN_IN_SECS }) => {
   if (!ctx || !action) throw new Error('context and action are required')
 
@@ -46,7 +71,8 @@ const setResponse = ({ ctx, status = 200, headers = {}, body = '' }) => {
 module.exports = {
   boldTextInHtml,
   createHtmlResponse,
-  setDataNotLoadedHtmlResponse,
+  createPayload,
   escapeHtml,
+  setDataNotLoadedHtmlResponse,
   setResponse,
 }

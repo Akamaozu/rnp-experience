@@ -1,6 +1,7 @@
 const {
   boldTextInHtml,
   createHtmlResponse,
+  createPayload,
   escapeHtml,
   setDataNotLoadedHtmlResponse,
   setResponse,
@@ -29,48 +30,35 @@ const getUserByUsername = async ctx => {
     return
   }
 
-  const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const MOST_RECENT_PRS_COUNT = ctx.state.MOST_RECENT_PRS_COUNT
   const username = ctx.params.username
   const normalizedUsername = username.toLowerCase()
   const users = ctx.state.users
   const pulls = ctx.state.pulls
   const repos = ctx.state.repos
-  const orgDataSize = ctx.state.orgDataSize
 
   const user = users.get(normalizedUsername)
-  const payload = {
-    organization: boldTextInHtml(GITHUB_ORG_NAME),
-    repos: {
-      count: repos.keys().length,
-      pr_authors: users.keys().reduce((state, user) => {
-        const userPrs = pulls.index_get('author:'+ user)
-        return userPrs.length > 0
-          ? state + 1
-          : state
-      }, 0),
-      prs: pulls.keys().length,
-    },
-    data_size: orgDataSize,
-    breadcrumb: ''
-      + '<a href='+ escapeHtml('/') + '>home</a>'
-      + ' > '
-      + '<a href='+ escapeHtml('/users') + '>pr authors</a>',
-    user: {
-      name: boldTextInHtml(normalizedUsername),
-      profile: '<a href='+ escapeHtml(user.html_url) + ' target=\'_blank\'>github</a>',
-      languages: pulls.index_get('author:'+ normalizedUsername).reduce((state, pullKey) => {
-        const pull = pulls.get(pullKey).data
-        const repo = repos.get(pull.repo_key).data
-        const lang = repo.language
+  const payload = createPayload(ctx)
 
-        if (!state.includes(lang)) state.push(lang)
-        return state
-      }, []).sort().join(', '),
-      total_prs: pulls.index_get('author:'+ normalizedUsername).length,
-      total_repos_with_user_prs: 0,
-      repos_with_user_prs: {},
-    },
+  payload.breadcrumb = ''
+    + '<a href='+ escapeHtml('/') + '>home</a>'
+    + ' > '
+    + '<a href='+ escapeHtml('/users') + '>pr authors</a>'
+
+  payload.user = {
+    name: boldTextInHtml(normalizedUsername),
+    profile: '<a href='+ escapeHtml(user.html_url) + ' target=\'_blank\'>github</a>',
+    languages: pulls.index_get('author:'+ normalizedUsername).reduce((state, pullKey) => {
+      const pull = pulls.get(pullKey).data
+      const repo = repos.get(pull.repo_key).data
+      const lang = repo.language
+
+      if (!state.includes(lang)) state.push(lang)
+      return state
+    }, []).sort().join(', '),
+    total_prs: pulls.index_get('author:'+ normalizedUsername).length,
+    total_repos_with_user_prs: 0,
+    repos_with_user_prs: {},
   }
 
   let userPrs = pulls.index_get('author:'+ normalizedUsername)
@@ -175,102 +163,91 @@ const listUsers = async ctx => {
                                             }, [])
                             return state
                           }, {})
-  const payload = {
-    organization: boldTextInHtml(GITHUB_ORG_NAME),
-    repos: {
-      count: repos.keys().length,
-      pr_authors: users.keys().reduce((state, user) => {
-        const userPrs = pulls.index_get('author:'+ user)
-        return userPrs.length > 0
-          ? state + 1
-          : state
-      }, 0),
-      prs: pulls.keys().length,
-    },
-    data_size: orgDataSize,
-    breadcrumb: '<a href='+ escapeHtml('/') + '>home</a>',
-    pr_authors: {
-      sort: ''
-        + (sort === SORT_TYPES.ALPHABETIC
-            ? 'alphabetic'
-            : '<a href=\'/users?sort=alphabetic\'>alphabetic</a>'
-          )
-        + ' '
-        + (sort === SORT_TYPES.RECENT
-            ? 'recent'
-            : '<a href=\'/users?sort=recent\'>recent</a>'
-          )
-        + ' '
-        + (sort === SORT_TYPES.POLYGLOT
-            ? 'polyglot'
-            : '<a href=\'/users?sort=polyglot\'>polyglot</a>'
-          )
-        + ' '
-        + (sort === SORT_TYPES.PROLIFIC
-            ? 'prolific'
-            : '<a href=\'/users?sort=prolific\'>prolific</a>'
-          ),
-      data: users
-              .keys()
-              .filter(user => {
-                const userPulls = pulls.index_get('author:'+ user)
-                return userPulls.length > 0
-              })
-              .sort(
-                sort === 'alphabetic'
-                  ? undefined // uses js default array sort
-                  : (a,b) => {
-                    switch (sort) {
-                      case 'recent':
-                        const aMostRecentPr = pulls.get( pulls.index_get('author:'+ a)[0] )
-                        const bMostRecentPr = pulls.get( pulls.index_get('author:'+ b)[0] )
 
-                        if (aMostRecentPr.data.created_at > bMostRecentPr.data.created_at) return -1
-                        if (aMostRecentPr.data.created_at < bMostRecentPr.data.created_at) return 1
-                        return 0
-                      break
+  const payload = createPayload(ctx)
 
-                      case 'polyglot':
-                        const aLangs = usersLanguages[a]
-                        const bLangs = usersLanguages[b]
+  payload.breadcrumb = '<a href='+ escapeHtml('/') + '>home</a>'
+  payload.pr_authors = {
+    sort: ''
+      + (sort === SORT_TYPES.ALPHABETIC
+          ? 'alphabetic'
+          : '<a href=\'/users?sort=alphabetic\'>alphabetic</a>'
+        )
+      + ' '
+      + (sort === SORT_TYPES.RECENT
+          ? 'recent'
+          : '<a href=\'/users?sort=recent\'>recent</a>'
+        )
+      + ' '
+      + (sort === SORT_TYPES.POLYGLOT
+          ? 'polyglot'
+          : '<a href=\'/users?sort=polyglot\'>polyglot</a>'
+        )
+      + ' '
+      + (sort === SORT_TYPES.PROLIFIC
+          ? 'prolific'
+          : '<a href=\'/users?sort=prolific\'>prolific</a>'
+        ),
+    data: users
+            .keys()
+            .filter(user => {
+              const userPulls = pulls.index_get('author:'+ user)
+              return userPulls.length > 0
+            })
+            .sort(
+              sort === 'alphabetic'
+                ? undefined // uses js default array sort
+                : (a,b) => {
+                  switch (sort) {
+                    case 'recent':
+                      const aMostRecentPr = pulls.get( pulls.index_get('author:'+ a)[0] )
+                      const bMostRecentPr = pulls.get( pulls.index_get('author:'+ b)[0] )
 
-                        if (aLangs.length > bLangs.length) return -1
-                        if (aLangs.length < bLangs.length) return 1
-                        return 0
-                      break
+                      if (aMostRecentPr.data.created_at > bMostRecentPr.data.created_at) return -1
+                      if (aMostRecentPr.data.created_at < bMostRecentPr.data.created_at) return 1
+                      return 0
+                    break
 
-                      case 'prolific':
-                        const aPrs = pulls.index_get('author:'+ a)
-                        const bPrs = pulls.index_get('author:'+ b)
+                    case 'polyglot':
+                      const aLangs = usersLanguages[a]
+                      const bLangs = usersLanguages[b]
 
-                        if (aPrs.length > bPrs.length) return -1
-                        if (aPrs.length < bPrs.length) return 1
-                        return 0
-                      break
-                    }
+                      if (aLangs.length > bLangs.length) return -1
+                      if (aLangs.length < bLangs.length) return 1
+                      return 0
+                    break
+
+                    case 'prolific':
+                      const aPrs = pulls.index_get('author:'+ a)
+                      const bPrs = pulls.index_get('author:'+ b)
+
+                      if (aPrs.length > bPrs.length) return -1
+                      if (aPrs.length < bPrs.length) return 1
+                      return 0
+                    break
                   }
-              )
-              .map(username => {
-                const normalizedUsername = username.toLowerCase()
-                const userPrs = pulls.index_get('author:'+ normalizedUsername)
-                const reposWithUserPrs = userPrs.reduce((state, prKey) => {
-                  const pr = pulls.get(prKey)
-                  return !state.includes(pr.data.repo_key)
-                    ? [].concat(state, pr.data.repo_key)
-                    : state
-                }, [])
+                }
+            )
+            .map(username => {
+              const normalizedUsername = username.toLowerCase()
+              const userPrs = pulls.index_get('author:'+ normalizedUsername)
+              const reposWithUserPrs = userPrs.reduce((state, prKey) => {
+                const pr = pulls.get(prKey)
+                return !state.includes(pr.data.repo_key)
+                  ? [].concat(state, pr.data.repo_key)
+                  : state
+              }, [])
 
-                return ''
-                  + '<a href='+ escapeHtml('/users/'+ normalizedUsername) +'>'
-                    + escapeHtml( normalizedUsername )
-                  + '</a>'
-                  + '<span style=\'color: #555; font-size: 0.85em; text-transform: uppercase; margin-left: 1em\'>'
-                    + userPrs.length +' '+ (userPrs.length != 1 ? 'pulls' : 'pull')
-                    + ', '+ reposWithUserPrs.length +' '+ (reposWithUserPrs.length != 1 ? 'repos' : 'repo')
-                    + ', '+ usersLanguages[normalizedUsername].length +' '+ (usersLanguages[normalizedUsername].length != 1 ? 'languages' : 'language')
-                  + '</span>'
-              }),
-    },
+              return ''
+                + '<a href='+ escapeHtml('/users/'+ normalizedUsername) +'>'
+                  + escapeHtml( normalizedUsername )
+                + '</a>'
+                + '<span style=\'color: #555; font-size: 0.85em; text-transform: uppercase; margin-left: 1em\'>'
+                  + userPrs.length +' '+ (userPrs.length != 1 ? 'pulls' : 'pull')
+                  + ', '+ reposWithUserPrs.length +' '+ (reposWithUserPrs.length != 1 ? 'repos' : 'repo')
+                  + ', '+ usersLanguages[normalizedUsername].length +' '+ (usersLanguages[normalizedUsername].length != 1 ? 'languages' : 'language')
+                + '</span>'
+            }),
   }
 
   ctx.body = createHtmlResponse('<pre>'+ JSON.stringify(payload, null, 2) +'</pre>')
