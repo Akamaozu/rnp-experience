@@ -108,6 +108,11 @@ pulls.add_index('created:last-month', (pr, addToIndex) => {
   ) addToIndex()
 })
 
+// index repos by privacy status
+repos.add_index('is-private', (repo, addToIndex) => {
+  if (repo.data.private) addToIndex()
+})
+
 let initialDataLoaded = false
 
 const startServer = () => {
@@ -353,7 +358,7 @@ const getOrgReposPullRequests = async () => {
     })
   }
 
-  // create indexes for pull request data
+  // load pull requests data into indexable hash
   repos.keys().forEach(repo => {
     orgReposPullRequests[repo].data.forEach(pr => {
       const prKey = repo +'#'+ pr.number
@@ -375,7 +380,6 @@ const getOrgReposPullRequests = async () => {
       delete pr.labels
 
       // add pr to index hash data
-      // pulls.add( prKey, pr )
       pulls.add( prKey, {
         data: pr,
         meta: {

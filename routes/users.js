@@ -54,7 +54,7 @@ const getUserByUsername = async ctx => {
       const repo = repos.get(pull.repo_key).data
       const lang = repo.language
 
-      if (!state.includes(lang)) state.push(lang)
+      if (lang && !state.includes(lang)) state.push(lang)
       return state
     }, []).sort().join(', '),
     total_prs: pulls.index_get('author:'+ normalizedUsername).length,

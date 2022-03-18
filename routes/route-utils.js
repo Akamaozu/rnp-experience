@@ -3,6 +3,7 @@ const constants = require('../constants')
 const escapeHtml = require('escape-html')
 
 const boldTextInHtml = str => '<b>'+ str +'</b>'
+const statDetailsTextInHtml = details => '<span style=\'color: #555; font-size: 0.85em; text-transform: uppercase\'>'+ details +'</span>'
 const createHtmlResponse = html => ''
   + '<!doctype html>'
   + '<html>'
@@ -16,6 +17,8 @@ const createHtmlResponse = html => ''
   + '</html>'
 
 const createPayload = ctx => {
+  if (!ctx) throw new Error('server context is required for creating response payload')
+
   const GITHUB_ORG_NAME = ctx.state.GITHUB_ORG_NAME
   const repos = ctx.state.repos
   const pulls = ctx.state.pulls
@@ -25,7 +28,13 @@ const createPayload = ctx => {
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
     repos: {
-      count: repos.keys().length,
+      count: repos.keys().length
+              + ' '
+              + statDetailsTextInHtml(''
+                  + repos.keys().length - repos.index_get('is-private').length +' public'
+                  + ', '
+                  + repos.index_get('is-private').length +' private'
+                ),
       pr_authors: users.keys().reduce((state, user) => {
         const userPrs = pulls.index_get('author:'+ user)
         return userPrs.length > 0
@@ -34,14 +43,31 @@ const createPayload = ctx => {
       }, 0),
       prs: pulls.keys().length,
     },
-    data_size: orgDataSize,
+    data: {
+      time: pulls
+              .index_get('created:last-week')
+              .sort((a,b) => {
+                const aPull = pulls.get(a)
+                const bPull = pulls.get(b)
+
+                if (aPull.meta.updated > bPull.meta.updated) return -1
+                if (aPull.meta.updated < bPull.meta.updated) return 1
+                return 0
+              })
+              .slice(0,1)
+              .map(key => pulls.get(key))
+              .shift()
+              .meta.updated,
+      size: orgDataSize,
+    }
   }
 
   return payload
 }
 
 const setDataNotLoadedHtmlResponse = ({ ctx, action, retrySecs = 5 * constants.time.MIN_IN_SECS }) => {
-  if (!ctx || !action) throw new Error('context and action are required')
+  if (!ctx) throw new Error('server context is required for creating response payload')
+  if (!action) throw new Error('name of action in progress is required for creating response payload')
 
   if (typeof retrySecs === 'string') retrySecs = parseInt(retrySecs)
 
@@ -75,4 +101,5 @@ module.exports = {
   escapeHtml,
   setDataNotLoadedHtmlResponse,
   setResponse,
+  statDetailsTextInHtml,
 }
