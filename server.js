@@ -4,6 +4,7 @@ const KoaRouter = require('koa-router')
 const sizeOf = require('object-sizeof')
 const asyncPool = require('tiny-async-pool')
 const createIndexingHash = require('cjs-indexing-hash')
+const constants = require('./constants')
 const commands = require('./commands')
 const routes = require('./routes')
 
@@ -107,6 +108,22 @@ pulls.add_index('created:last-month', (pr, addToIndex) => {
     && pr.data.created_at < startOfMonth.toISOString()
   ) addToIndex()
 })
+
+// recalculate time-based indexes
+const recalcTimebasedIndexesMins = parseInt(process.env.RECALCULATE_TIMEBASED_INDEXES_INTERVAL_MINS) > 0
+  ? process.env.RECALCULATE_TIMEBASED_INDEXES_INTERVAL_MINS
+  : 15
+
+setInterval(() => {
+  pulls.reindex({
+    indexes: [
+      'created:this-week',
+      'created:last-week',
+      'created:this-month',
+      'created:last-month',
+    ]
+  })
+}, recalcTimebasedIndexesMins * constants.time.MIN_IN_SECS * constants.time.SEC_IN_MS)
 
 // index repos by privacy status
 repos.add_index('is-private', (repo, addToIndex) => {
