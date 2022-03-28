@@ -1,7 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const getAccessTokenSha = require('./get-access-token-sha')
-const dataDirPath = path.join(__dirname, '../data')
+const dataDirPath = path.join(__dirname, '..', 'data')
 
 module.exports = async ({ accessToken, key }) => {
   if (!accessToken) throw new Error('access token not specified')
