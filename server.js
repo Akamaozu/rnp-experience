@@ -479,6 +479,32 @@ const getOrgDataSize = () => {
   return orgDataSize
 }
 
+const getOrgDataTime = () => {
+  return pulls
+          .keys()
+          .map(key => pulls.get(key))
+          .sort((aPull, bPull) => {
+            if (aPull.meta.updated > bPull.meta.updated) return -1
+            if (aPull.meta.updated < bPull.meta.updated) return 1
+            return 0
+          })
+          .slice(0,1)
+          .shift()
+          .meta.updated
+}
+
+const trackOrgDataTime = () => {
+  const updateDataTime = ({ key }) => {
+    const pull = pulls.get(key)
+    if (pull.meta.updated <= orgDataUpdated) return
+    orgDataUpdated = pull.meta.updated
+  }
+
+  // when a pull request is updated, use its timestamp as dataset's time
+  pulls.hooks.add( 'key-created', 'update-data-timestamp', updateDataTime )
+  pulls.hooks.add( 'key-updated', 'update-data-timestamp', updateDataTime )
+}
+
 const init = async () => {
   let startTime
 
@@ -491,30 +517,11 @@ const init = async () => {
     await getOrgRepos()
     await getOrgReposPullRequests()
 
-    // use most-recent update timestamp
-    orgDataUpdated = pulls
-                      .keys()
-                      .map(key => pulls.get(key))
-                      .sort((aPull, bPull) => {
-                        if (aPull.meta.updated > bPull.meta.updated) return -1
-                        if (aPull.meta.updated < bPull.meta.updated) return 1
-                        return 0
-                      })
-                      .slice(0,1)
-                      .shift()
-                      .meta.updated
-
-    const updateDataTime = ({ key }) => {
-      const pull = pulls.get(key)
-      if (pull.meta.updated <= orgDataUpdated) return
-      orgDataUpdated = pull.meta.updated
-    }
-
-    // when a pull request is updated, use its timestamp as dataset's time
-    pulls.hooks.add( 'key-created', 'update-data-timestamp', updateDataTime )
-    pulls.hooks.add( 'key-updated', 'update-data-timestamp', updateDataTime )
-
     initialDataLoaded = true
+
+    orgDataUpdated = getOrgDataTime()
+    trackOrgDataTime()
+
     console.log('action=load-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
     console.log('action=log-org-data-size size=', getOrgDataSize())
   }
@@ -533,7 +540,14 @@ const init = async () => {
     try {
       await getOrgRepos()
       await getOrgReposPullRequests()
-      if (!initialDataLoaded) initialDataLoaded = true
+
+      if (!initialDataLoaded) {
+        initialDataLoaded = true
+
+        orgDataUpdated = getOrgDataTime()
+        trackOrgDataTime()
+      }
+
       console.log('action=refresh-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
       console.log('action=log-org-data-size size=', getOrgDataSize())
     }
