@@ -24,6 +24,7 @@ const createPayload = ctx => {
   const pulls = ctx.state.pulls
   const users = ctx.state.users
   const orgDataSize = ctx.state.orgDataSize
+  const orgDataUpdated = ctx.state.orgDataUpdated
 
   const payload = {
     organization: boldTextInHtml(GITHUB_ORG_NAME),
@@ -44,20 +45,7 @@ const createPayload = ctx => {
       prs: pulls.keys().length,
     },
     data: {
-      time: pulls
-              .index_get('created:last-week')
-              .sort((a,b) => {
-                const aPull = pulls.get(a)
-                const bPull = pulls.get(b)
-
-                if (aPull.meta.updated > bPull.meta.updated) return -1
-                if (aPull.meta.updated < bPull.meta.updated) return 1
-                return 0
-              })
-              .slice(0,1)
-              .map(key => pulls.get(key))
-              .shift()
-              .meta.updated,
+      time: orgDataUpdated,
       size: orgDataSize,
     }
   }
