@@ -1,6 +1,6 @@
 {
 	"dependencies": {
-		"cjs-indexing-hash": "^1.2.0",
+		"cjs-indexing-hash": "^1.2.1",
 		"dotenv": "^16.0.0",
 		"escape-html": "^1.0.3",
 		"github-api": "^3.4.0",
