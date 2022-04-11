@@ -16,6 +16,7 @@ const {
 } = process.env
 
 let orgDataSize
+let orgDataUpdated
 
 const pulls = createIndexingHash()
 const repos = createIndexingHash()
@@ -156,6 +157,7 @@ const startServer = () => {
     ctx.state.users = users
     ctx.state.licenses = licenses
     ctx.state.orgDataSize = orgDataSize
+    ctx.state.orgDataUpdated = orgDataUpdated
     ctx.state.initialDataLoaded = initialDataLoaded
 
     await next()
@@ -379,7 +381,6 @@ const getOrgReposPullRequests = async () => {
   repos.keys().forEach(repo => {
     orgReposPullRequests[repo].data.forEach(pr => {
       const prKey = repo +'#'+ pr.number
-      if (pulls.keys().includes(prKey)) return
 
       // create user for pr author, if none exists
       pr.user_key = pr.user.login.toLowerCase()
@@ -396,13 +397,17 @@ const getOrgReposPullRequests = async () => {
       delete pr.head
       delete pr.labels
 
-      // add pr to index hash data
-      pulls.add( prKey, {
+      // add (or update) pr to index hash data
+      const indexablePull = {
         data: pr,
         meta: {
           updated: orgReposPullRequests[repo].meta.updated
         }
-      })
+      }
+
+      pulls.keys().includes(prKey)
+        ? pulls.update( prKey, indexablePull )
+        : pulls.add( prKey, indexablePull )
     })
   })
 
@@ -485,6 +490,30 @@ const init = async () => {
   try {
     await getOrgRepos()
     await getOrgReposPullRequests()
+
+    // use most-recent update timestamp
+    orgDataUpdated = pulls
+                      .keys()
+                      .map(key => pulls.get(key))
+                      .sort((aPull, bPull) => {
+                        if (aPull.meta.updated > bPull.meta.updated) return -1
+                        if (aPull.meta.updated < bPull.meta.updated) return 1
+                        return 0
+                      })
+                      .slice(0,1)
+                      .shift()
+                      .meta.updated
+
+    const updateDataTime = ({ key }) => {
+      const pull = pulls.get(key)
+      if (pull.meta.updated <= orgDataUpdated) return
+      orgDataUpdated = pull.meta.updated
+    }
+
+    // when a pull request is updated, use its timestamp as dataset's time
+    pulls.hooks.add( 'key-created', 'update-data-timestamp', updateDataTime )
+    pulls.hooks.add( 'key-updated', 'update-data-timestamp', updateDataTime )
+
     initialDataLoaded = true
     console.log('action=load-org-data-in-memory success=true duration='+ (Date.now() - startTime) +'ms')
     console.log('action=log-org-data-size size=', getOrgDataSize())
